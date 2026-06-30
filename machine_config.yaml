@@ -1,6 +1,6 @@
 defaults:
   project_root: "/data/GNSS/hector-projects/"
-  hector_home: "/home/radek/HECTOR_TEMP/"
+  hector_home: "/home/gnss/HECTOR_TEMP/"
 analysis:
   reference_frame: "IGS20"
   sampling_period_days: 1.0
