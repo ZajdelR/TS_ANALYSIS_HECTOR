@@ -113,6 +113,19 @@ def get_component_label(station_name: str) -> str:
     return labels.get(component, f"Component {component}")
 
 
+def get_component_index(station_name: str) -> int:
+    match = re.match(r".+_(\d+)$", station_name)
+    if not match:
+        return 99
+    return int(match.group(1))
+
+
+def get_component_sort_key(station_name: str) -> tuple[int, str]:
+    component_order = {1: 0, 0: 1, 2: 2}
+    component_index = get_component_index(station_name)
+    return component_order.get(component_index, 99), station_name
+
+
 def create_removeoutliers_ctl_file(
     ctl_path: Path,
     station: str,
@@ -406,19 +419,51 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
     plt.close()
 
 
-def make_station_component_data_plot(marker: str, component_paths: list[Path], figure_dir: Path) -> None:
+def format_model_legend(estimatetrend_json: dict[str, object]) -> str:
+    trend = estimatetrend_json.get("trend")
+    trend_sigma = estimatetrend_json.get("trend_sigma")
+    if isinstance(trend, (int, float)) and isinstance(trend_sigma, (int, float)):
+        return f"Model trend={trend:.3f} +/- {trend_sigma:.3f}"
+    if isinstance(trend, (int, float)):
+        return f"Model trend={trend:.3f}"
+    return "Model"
+
+
+def make_station_component_data_plot(
+    marker: str,
+    component_results: list[dict[str, object]],
+    figure_dir: Path,
+) -> None:
     figure_dir.mkdir(parents=True, exist_ok=True)
-    plt.figure(figsize=(12, 8))
-    for component_path in component_paths:
-        years, data_values, model_values = read_mom_series(component_path)
-        label = get_component_label(component_path.stem)
-        plt.plot(years, data_values, ".", markersize=2, label=f"{label} data")
-        plt.plot(years, model_values, "-", linewidth=1.2, label=f"{label} model")
-    plt.xlabel("Years")
-    plt.ylabel("mm")
-    plt.legend(ncol=2)
-    plt.tight_layout()
-    plt.savefig(figure_dir / f"{marker}_components_data.png", dpi=150)
+    ordered_results = sorted(
+        component_results,
+        key=lambda item: get_component_sort_key(item["station_name"]),
+    )
+    fig, axes = plt.subplots(len(ordered_results), 1, figsize=(12, 3.8 * len(ordered_results)), sharex=True)
+    if len(ordered_results) == 1:
+        axes = [axes]
+
+    for axis, result in zip(axes, ordered_results):
+        metadata = result["metadata"]
+        mom_path = Path(str(metadata["mom_path"]))
+        years, data_values, model_values = read_mom_series(mom_path)
+        component_label = str(metadata["component_label"])
+        axis.plot(years, data_values, ".", markersize=2, label=f"{component_label} data")
+        axis.plot(
+            years,
+            model_values,
+            "-",
+            linewidth=1.2,
+            label=format_model_legend(result["estimatetrend"]),
+        )
+        axis.set_ylabel("mm")
+        axis.set_title(component_label)
+        axis.legend(loc="best", fontsize=9)
+
+    axes[-1].set_xlabel("Years")
+    fig.tight_layout()
+    fig.savefig(figure_dir / f"{marker}_components_data.png", dpi=150)
+    plt.close(fig)
     plt.close()
 
 
@@ -470,29 +515,64 @@ def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
 
 def make_station_component_psd_plot(
     marker: str,
-    psd_series: list[tuple[str, Path]],
+    component_results: list[dict[str, object]],
     figure_dir: Path,
 ) -> None:
     seconds_per_year = 31557600.0
     figure_dir.mkdir(parents=True, exist_ok=True)
-    plt.figure(figsize=(8, 6))
-    for station_name, work_dir in psd_series:
+    ordered_results = sorted(
+        component_results,
+        key=lambda item: get_component_sort_key(item["station_name"]),
+    )
+    fig, axes = plt.subplots(len(ordered_results), 1, figsize=(10, 3.8 * len(ordered_results)), sharex=True)
+    if len(ordered_results) == 1:
+        axes = [axes]
+
+    for axis, result in zip(axes, ordered_results):
+        metadata = result["metadata"]
+        work_dir = Path(str(metadata["psd_cache_dir"]))
         spectrum_x, spectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
-        label = get_component_label(station_name)
-        plt.loglog(
+        model_x, model_y = read_two_column_file(work_dir / "modelspectrum.out")
+        percentile_x, percentile_low, percentile_high = read_four_column_file(
+            work_dir / "modelspectrum_percentiles.out"
+        )
+        component_label = str(metadata["component_label"])
+
+        axis.loglog(
             [value * seconds_per_year for value in spectrum_x],
             [value / seconds_per_year for value in spectrum_y],
-            ".-",
-            linewidth=1.0,
+            ".",
             markersize=3,
-            label=label,
+            label="Estimate",
         )
-    plt.xlabel("Frequency (cpy)")
-    plt.ylabel("Power (mm^2/cpy)")
-    plt.tight_layout()
-    plt.legend()
-    plt.savefig(figure_dir / f"{marker}_components_psd.png", dpi=150)
-    plt.close()
+        axis.loglog(
+            [value * seconds_per_year for value in model_x],
+            [value / seconds_per_year for value in model_y],
+            "-",
+            linewidth=1.2,
+            label=format_model_legend(result["estimatetrend"]),
+        )
+        axis.loglog(
+            [value * seconds_per_year for value in percentile_x],
+            [value / seconds_per_year for value in percentile_low],
+            "--",
+            linewidth=1.0,
+            label="Percentiles",
+        )
+        axis.loglog(
+            [value * seconds_per_year for value in percentile_x],
+            [value / seconds_per_year for value in percentile_high],
+            "--",
+            linewidth=1.0,
+        )
+        axis.set_ylabel("Power")
+        axis.set_title(component_label)
+        axis.legend(loc="best", fontsize=9)
+
+    axes[-1].set_xlabel("Frequency (cpy)")
+    fig.tight_layout()
+    fig.savefig(figure_dir / f"{marker}_components_psd.png", dpi=150)
+    plt.close(fig)
 
 
 def run_command(command: list[str], cwd: Path, stdout_path: Path | None = None, stdin_path: Path | None = None) -> None:
@@ -772,15 +852,10 @@ def analyse_project(
     report_dir = fil_dir / "reports"
     for marker, component_results in grouped_results.items():
         sorted_results = sorted(component_results, key=lambda item: item["station_name"])
-        component_mom_paths = [Path(str(item["metadata"]["mom_path"])) for item in sorted_results]
-        if len(component_mom_paths) > 1:
-            make_station_component_data_plot(marker, component_mom_paths, data_figure_dir)
-            psd_series = [
-                (item["station_name"], Path(str(item["metadata"]["psd_cache_dir"])))
-                for item in sorted_results
-            ]
-            if all(path.exists() for _, path in psd_series):
-                make_station_component_psd_plot(marker, psd_series, psd_figure_dir)
+        if len(sorted_results) > 1:
+            make_station_component_data_plot(marker, sorted_results, data_figure_dir)
+            if all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
+                make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
         write_station_summary_report(marker, report_dir, noise_model, freq, sorted_results)
 
     return mom_dir, len(mom_files)
