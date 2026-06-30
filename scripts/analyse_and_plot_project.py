@@ -653,6 +653,44 @@ def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
     plt.close()
 
 
+def make_psd_period_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
+    estimatespectrum_x, estimatespectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
+    modelspectrum_x, modelspectrum_y = read_two_column_file(work_dir / "modelspectrum.out")
+    percentiles_x, percentiles_low, percentiles_high = read_four_column_file(
+        work_dir / "modelspectrum_percentiles.out"
+    )
+
+    seconds_per_year = 31557600.0
+    figure_dir.mkdir(parents=True, exist_ok=True)
+
+    def to_period_amplitude(xs: list[float], ys: list[float]) -> tuple[list[float], list[float]]:
+        periods: list[float] = []
+        amplitudes: list[float] = []
+        for x_value, y_value in zip(xs, ys):
+            if x_value <= 0.0:
+                continue
+            periods.append(seconds_per_year / x_value / 86400.0)
+            amplitudes.append(math.sqrt(max(y_value / seconds_per_year, 0.0)))
+        return periods, amplitudes
+
+    est_x, est_y = to_period_amplitude(estimatespectrum_x, estimatespectrum_y)
+    model_x, model_y = to_period_amplitude(modelspectrum_x, modelspectrum_y)
+    pct_x, pct_low = to_period_amplitude(percentiles_x, percentiles_low)
+    _, pct_high = to_period_amplitude(percentiles_x, percentiles_high)
+
+    plt.figure(figsize=(7, 5))
+    plt.semilogx(est_x, est_y, ".", markersize=4, label="Estimate")
+    plt.semilogx(model_x, model_y, "-", linewidth=1.5, label="Model")
+    plt.semilogx(pct_x, pct_low, "--", linewidth=1.0, label="Percentiles")
+    plt.semilogx(pct_x, pct_high, "--", linewidth=1.0)
+    plt.xlabel("Period (days)")
+    plt.ylabel("Amplitude (mm)")
+    plt.tight_layout()
+    plt.legend()
+    plt.savefig(figure_dir / f"{station}_psd_days.png", dpi=150)
+    plt.close()
+
+
 def make_station_component_psd_plot(
     marker: str,
     component_results: list[dict[str, object]],
@@ -724,6 +762,86 @@ def make_station_component_psd_plot(
     axes[-1].set_xlabel("Frequency (cpy)")
     fig.tight_layout()
     fig.savefig(figure_dir / f"{marker}_components_psd.png", dpi=150)
+    plt.close(fig)
+
+
+def make_station_component_psd_period_plot(
+    marker: str,
+    component_results: list[dict[str, object]],
+    figure_dir: Path,
+) -> None:
+    seconds_per_year = 31557600.0
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    ordered_results = sorted(
+        component_results,
+        key=lambda item: get_component_sort_key(item["station_name"]),
+    )
+    fig, axes = plt.subplots(len(ordered_results), 1, figsize=(10, 3.8 * len(ordered_results)), sharex=True)
+    if len(ordered_results) == 1:
+        axes = [axes]
+
+    def to_period_amplitude(xs: list[float], ys: list[float]) -> tuple[list[float], list[float]]:
+        periods: list[float] = []
+        amplitudes: list[float] = []
+        for x_value, y_value in zip(xs, ys):
+            if x_value <= 0.0:
+                continue
+            periods.append(seconds_per_year / x_value / 86400.0)
+            amplitudes.append(math.sqrt(max(y_value / seconds_per_year, 0.0)))
+        return periods, amplitudes
+
+    for axis, result in zip(axes, ordered_results):
+        metadata = result["metadata"]
+        work_dir = Path(str(metadata["psd_cache_dir"]))
+        spectrum_x, spectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
+        model_x, model_y = read_two_column_file(work_dir / "modelspectrum.out")
+        percentile_x, percentile_low, percentile_high = read_four_column_file(
+            work_dir / "modelspectrum_percentiles.out"
+        )
+        component_label = str(metadata["component_label"])
+
+        axis.semilogx(
+            *to_period_amplitude(spectrum_x, spectrum_y),
+            ".",
+            markersize=3,
+            label="Estimate",
+        )
+        axis.semilogx(
+            *to_period_amplitude(model_x, model_y),
+            "-",
+            linewidth=1.2,
+            label=format_model_legend(result["estimatetrend"]),
+        )
+        axis.semilogx(
+            *to_period_amplitude(percentile_x, percentile_low),
+            "--",
+            linewidth=1.0,
+            label="Percentiles",
+        )
+        axis.semilogx(
+            *to_period_amplitude(percentile_x, percentile_high),
+            "--",
+            linewidth=1.0,
+        )
+        axis.set_ylabel("Amplitude")
+        axis.set_title(component_label)
+        axis.legend(loc="best", fontsize=9)
+        annotation_lines = build_model_annotation_lines(result["estimatetrend"])
+        if len(annotation_lines) > 1:
+            axis.text(
+                0.01,
+                0.98,
+                "\n".join(annotation_lines[1:6]),
+                transform=axis.transAxes,
+                va="top",
+                ha="left",
+                fontsize=8,
+                bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.7},
+            )
+
+    axes[-1].set_xlabel("Period (days)")
+    fig.tight_layout()
+    fig.savefig(figure_dir / f"{marker}_components_psd_days.png", dpi=150)
     plt.close(fig)
 
 
@@ -855,6 +973,7 @@ def analyse_station(
         )
 
         make_psd_plot(station, temp_dir, psd_figure_dir)
+        make_psd_period_plot(station, temp_dir, psd_figure_dir)
         make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
         psd_cache_dir = fil_dir / "psd_cache"
         psd_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -1013,6 +1132,7 @@ def analyse_project(
             make_station_component_data_plot(marker, sorted_results, data_figure_dir)
             if all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
                 make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
+                make_station_component_psd_period_plot(marker, sorted_results, psd_figure_dir)
         write_station_summary_report(marker, report_dir, noise_model, freq, sorted_results)
 
     return mom_dir, len(mom_files)
