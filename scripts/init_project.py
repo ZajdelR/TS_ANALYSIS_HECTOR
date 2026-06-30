@@ -7,6 +7,11 @@ import argparse
 import re
 from pathlib import Path
 
+try:
+    from scripts.project_registry import register_project
+except ModuleNotFoundError:
+    from project_registry import register_project
+
 ROOT_DIR = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = ROOT_DIR / "projects"
 
@@ -27,9 +32,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("project_name", help="Project directory name inside projects/.")
     parser.add_argument(
+        "--project-root",
+        default=str(PROJECTS_DIR),
+        help="Base directory where the project directory will be created.",
+    )
+    parser.add_argument(
         "--hector-home",
         default="/home/radek/app/hector",
         help="Base path that contains HECTOR executables and resources.",
+    )
+    parser.add_argument(
+        "--overwrite-registry",
+        action="store_true",
+        help="Replace an existing project-name to path mapping in the registry.",
     )
     parser.add_argument(
         "--overwrite-config",
@@ -82,10 +97,17 @@ def render_yaml(project_name: str, project_dir: Path, hector_home: Path) -> str:
     )
 
 
-def initialize_project(project_name: str, hector_home: str, overwrite_config: bool) -> Path:
+def initialize_project(
+    project_name: str,
+    project_root: str,
+    hector_home: str,
+    overwrite_config: bool,
+    overwrite_registry: bool,
+) -> Path:
     validate_project_name(project_name)
 
-    project_dir = PROJECTS_DIR / project_name
+    base_dir = Path(project_root).expanduser().resolve()
+    project_dir = base_dir / project_name
     project_dir.mkdir(parents=True, exist_ok=True)
 
     for relative_dir in DEFAULT_SUBDIRECTORIES:
@@ -101,6 +123,11 @@ def initialize_project(project_name: str, hector_home: str, overwrite_config: bo
         render_yaml(project_name, project_dir, Path(hector_home).expanduser()),
         encoding="utf-8",
     )
+    register_project(
+        project_name=project_name,
+        project_dir=project_dir,
+        overwrite_existing=overwrite_registry,
+    )
     return project_dir
 
 
@@ -111,8 +138,10 @@ def main() -> int:
     try:
         project_dir = initialize_project(
             project_name=args.project_name,
+            project_root=args.project_root,
             hector_home=args.hector_home,
             overwrite_config=args.overwrite_config,
+            overwrite_registry=args.overwrite_registry,
         )
     except (ValueError, FileExistsError) as exc:
         parser.error(str(exc))

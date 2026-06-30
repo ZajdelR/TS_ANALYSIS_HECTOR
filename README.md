@@ -5,8 +5,9 @@ Repository for running time-series analysis workflows with HECTOR.
 ## Repository layout
 
 - `scripts/` contains executable helper scripts.
-- `projects/` contains generated analysis projects and outputs.
+- `projects/` can be used for local generated projects and outputs.
 - `example_python/` contains upstream or exploratory Python examples.
+- `project_registry.json` maps project names to their absolute filesystem paths.
 
 ## Installation
 
@@ -41,10 +42,16 @@ Current core dependencies:
 
 ## Initialize a project
 
-Create a new project scaffold under `projects/` using the installed command alias:
+Create a new project scaffold using the installed command alias:
 
 ```bash
 initiate-project my_project
+```
+
+To place a project outside the repository, point to a different base directory:
+
+```bash
+initiate-project my_project --project-root /data/hector_ts
 ```
 
 Equivalent direct Python entrypoints:
@@ -56,7 +63,9 @@ python3 main.py my_project
 
 Optional arguments:
 
+- `--project-root /path/to/projects_base` to choose where the project directory is created.
 - `--hector-home /path/to/hector` to override the default HECTOR location.
+- `--overwrite-registry` to replace an existing project name mapping in `project_registry.json`.
 - `--overwrite-config` to regenerate an existing `config/config.yaml`.
 
 Default HECTOR path written to the config:
@@ -78,3 +87,5 @@ Each initialized project currently contains:
 - `logs/`
 
 The generated `config.yaml` stores general analysis options and paths to HECTOR executables and input files.
+
+Each initialized project is also registered in `project_registry.json`, so future scripts can resolve a project name to its actual location even when projects are stored outside this repository.
