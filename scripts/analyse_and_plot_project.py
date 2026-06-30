@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -78,6 +79,13 @@ def collect_station_files(raw_dir: Path, station: str) -> list[Path]:
     if station:
         candidate = raw_dir / f"{station}.mom"
         if not candidate.exists():
+            component_matches = sorted(
+                path
+                for path in raw_dir.glob(f"{station}_*.mom")
+                if path.is_file() and re.search(r"_\d+$", path.stem)
+            )
+            if component_matches:
+                return component_matches
             raise FileNotFoundError(f"MOM file does not exist: {candidate}")
         return [candidate]
 
@@ -85,6 +93,22 @@ def collect_station_files(raw_dir: Path, station: str) -> list[Path]:
     if not files:
         raise FileNotFoundError(f"No .mom files found in {raw_dir}")
     return files
+
+
+def get_station_marker(station_name: str) -> str:
+    match = re.match(r"(.+)_\d+$", station_name)
+    if match:
+        return match.group(1)
+    return station_name
+
+
+def get_component_label(station_name: str) -> str:
+    match = re.match(r".+_(\d+)$", station_name)
+    if not match:
+        return station_name
+    component = match.group(1)
+    labels = {"0": "East", "1": "North", "2": "Up"}
+    return labels.get(component, f"Component {component}")
 
 
 def create_removeoutliers_ctl_file(
@@ -380,6 +404,22 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
     plt.close()
 
 
+def make_station_component_data_plot(marker: str, component_paths: list[Path], figure_dir: Path) -> None:
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    plt.figure(figsize=(12, 8))
+    for component_path in component_paths:
+        years, data_values, model_values = read_mom_series(component_path)
+        label = get_component_label(component_path.stem)
+        plt.plot(years, data_values, ".", markersize=2, label=f"{label} data")
+        plt.plot(years, model_values, "-", linewidth=1.2, label=f"{label} model")
+    plt.xlabel("Years")
+    plt.ylabel("mm")
+    plt.legend(ncol=2)
+    plt.tight_layout()
+    plt.savefig(figure_dir / f"{marker}_components_data.png", dpi=150)
+    plt.close()
+
+
 def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
     estimatespectrum_x, estimatespectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
     modelspectrum_x, modelspectrum_y = read_two_column_file(work_dir / "modelspectrum.out")
@@ -426,6 +466,33 @@ def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
     plt.close()
 
 
+def make_station_component_psd_plot(
+    marker: str,
+    psd_series: list[tuple[str, Path]],
+    figure_dir: Path,
+) -> None:
+    seconds_per_year = 31557600.0
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    plt.figure(figsize=(8, 6))
+    for station_name, work_dir in psd_series:
+        spectrum_x, spectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
+        label = get_component_label(station_name)
+        plt.loglog(
+            [value * seconds_per_year for value in spectrum_x],
+            [value / seconds_per_year for value in spectrum_y],
+            ".-",
+            linewidth=1.0,
+            markersize=3,
+            label=label,
+        )
+    plt.xlabel("Frequency (cpy)")
+    plt.ylabel("Power (mm^2/cpy)")
+    plt.tight_layout()
+    plt.legend()
+    plt.savefig(figure_dir / f"{marker}_components_psd.png", dpi=150)
+    plt.close()
+
+
 def run_command(command: list[str], cwd: Path, stdout_path: Path | None = None, stdin_path: Path | None = None) -> None:
     stdin_handle = stdin_path.open("r", encoding="utf-8") if stdin_path else None
     stdout_handle = stdout_path.open("w", encoding="utf-8") if stdout_path else subprocess.PIPE
@@ -465,7 +532,7 @@ def analyse_station(
     config: dict[str, dict[str, object]],
     noise_model: str,
     freq: float,
-) -> tuple[dict[str, object], dict[str, object]]:
+) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     paths = config["paths"]
     hector_removeoutliers = Path(str(paths["hector_removeoutliers"]))
     hector_estimatetrend = Path(str(paths["hector_estimatetrend"]))
@@ -555,8 +622,101 @@ def analyse_station(
 
         make_psd_plot(station, temp_dir, psd_figure_dir)
         make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
+        psd_cache_dir = fil_dir / "psd_cache"
+        psd_cache_dir.mkdir(parents=True, exist_ok=True)
+        station_cache_dir = psd_cache_dir / station
+        if station_cache_dir.exists():
+            shutil.rmtree(station_cache_dir)
+        station_cache_dir.mkdir(parents=True, exist_ok=True)
+        for filename in (
+            "estimatespectrum.out",
+            "modelspectrum.out",
+            "modelspectrum_percentiles.out",
+        ):
+            source = temp_dir / filename
+            if source.exists():
+                shutil.copy2(source, station_cache_dir / filename)
 
-    return estimatetrend_json, removeoutliers_json
+    metadata = {
+        "marker": get_station_marker(station),
+        "component_label": get_component_label(station),
+        "mom_path": str(mom_dir / f"{station}.mom"),
+        "data_plot": str(data_figure_dir / f"{station}_data.png"),
+        "residual_plot": str(data_figure_dir / f"{station}_res.png"),
+        "psd_plot": str(psd_figure_dir / f"{station}_psd.png"),
+        "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
+    }
+    return estimatetrend_json, removeoutliers_json, metadata
+
+
+def format_report_value(value: object) -> str:
+    if isinstance(value, float):
+        return f"{value:.6g}"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return str(value)
+
+
+def write_station_summary_report(
+    marker: str,
+    report_dir: Path,
+    noise_model: str,
+    freq: float,
+    component_results: list[dict[str, object]],
+) -> None:
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / f"{marker}_summary.md"
+    lines = [
+        f"# Station Summary: {marker}",
+        "",
+        f"- Noise model: `{noise_model}`",
+        f"- Extra frequency: `{freq}`",
+        f"- Components analysed: `{len(component_results)}`",
+        "",
+    ]
+    for result in component_results:
+        metadata = result["metadata"]
+        est_json = result["estimatetrend"]
+        rem_json = result["removeoutliers"]
+        lines.extend(
+            [
+                f"## {result['station_name']}",
+                "",
+                f"- Component: `{metadata['component_label']}`",
+                f"- MOM file: `{metadata['mom_path']}`",
+                f"- Data plot: `{metadata['data_plot']}`",
+                f"- Residual plot: `{metadata['residual_plot']}`",
+                f"- PSD plot: `{metadata['psd_plot']}`",
+            ]
+        )
+
+        trend_keys = ("trend", "trend_sigma", "bias", "driving_noise")
+        available_est_keys = [key for key in trend_keys if key in est_json]
+        if available_est_keys:
+            lines.append("")
+            lines.append("Estimated trend metrics:")
+            for key in available_est_keys:
+                lines.append(f"- `{key}`: `{format_report_value(est_json[key])}`")
+
+        remove_keys = ("N", "outliers", "NumberOfOutliers")
+        available_rem_keys = [key for key in remove_keys if key in rem_json]
+        if available_rem_keys:
+            lines.append("")
+            lines.append("Outlier summary:")
+            for key in available_rem_keys:
+                lines.append(f"- `{key}`: `{format_report_value(rem_json[key])}`")
+
+        if "NoiseModel" in est_json:
+            lines.append("")
+            lines.append("Noise model fit:")
+            noise_model_fit = est_json["NoiseModel"]
+            if isinstance(noise_model_fit, dict):
+                for name, params in noise_model_fit.items():
+                    lines.append(f"- `{name}`: `{format_report_value(params)}`")
+
+        lines.append("")
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def analyse_project(
@@ -571,13 +731,26 @@ def analyse_project(
 
     estimatetrend_results: dict[str, object] = {}
     removeoutliers_results: dict[str, object] = {}
+    grouped_results: dict[str, list[dict[str, object]]] = {}
     for mom_file in mom_files:
         station_name = mom_file.stem
-        est_json, rem_json = analyse_station(station_name, project_dir, config, noise_model, freq)
+        est_json, rem_json, metadata = analyse_station(
+            station_name, project_dir, config, noise_model, freq
+        )
         estimatetrend_results[station_name] = est_json
         removeoutliers_results[station_name] = rem_json
+        marker = str(metadata["marker"])
+        grouped_results.setdefault(marker, []).append(
+            {
+                "station_name": station_name,
+                "estimatetrend": est_json,
+                "removeoutliers": rem_json,
+                "metadata": metadata,
+            }
+        )
 
     mom_dir = project_dir / str(config["paths"]["mom_files_dir"])
+    fil_dir = project_dir / str(config["paths"]["fil_files_dir"])
     (mom_dir / "hector_estimatetrend.json").write_text(
         json.dumps(estimatetrend_results, indent=2) + "\n",
         encoding="utf-8",
@@ -586,6 +759,23 @@ def analyse_project(
         json.dumps(removeoutliers_results, indent=2) + "\n",
         encoding="utf-8",
     )
+
+    data_figure_dir = fil_dir / "data_figures"
+    psd_figure_dir = fil_dir / "psd_figures"
+    report_dir = fil_dir / "reports"
+    for marker, component_results in grouped_results.items():
+        sorted_results = sorted(component_results, key=lambda item: item["station_name"])
+        component_mom_paths = [Path(str(item["metadata"]["mom_path"])) for item in sorted_results]
+        if len(component_mom_paths) > 1:
+            make_station_component_data_plot(marker, component_mom_paths, data_figure_dir)
+            psd_series = [
+                (item["station_name"], Path(str(item["metadata"]["psd_cache_dir"])))
+                for item in sorted_results
+            ]
+            if all(path.exists() for _, path in psd_series):
+                make_station_component_psd_plot(marker, psd_series, psd_figure_dir)
+        write_station_summary_report(marker, report_dir, noise_model, freq, sorted_results)
+
     return mom_dir, len(mom_files)
 
 

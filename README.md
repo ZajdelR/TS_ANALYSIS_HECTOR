@@ -235,3 +235,5 @@ Outputs:
 - analysed MOM files in `mom_files/`
 - aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
 - PNG time-series and PSD plots in `fil_files/data_figures/` and `fil_files/psd_figures/`
+- combined station plots across available `_0/_1/_2` components when they exist
+- Markdown station summary reports in `fil_files/reports/`
