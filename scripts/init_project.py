@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 from pathlib import Path
 
 try:
@@ -46,11 +47,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--overwrite-registry",
         action="store_true",
         help="Replace an existing project-name to path mapping in the registry.",
-    )
-    parser.add_argument(
-        "--overwrite-config",
-        action="store_true",
-        help="Rewrite config.yaml if it already exists.",
     )
     return parser
 
@@ -100,28 +96,37 @@ def render_yaml(project_name: str, project_dir: Path, hector_home: Path) -> str:
     )
 
 
+def confirm_reinitialize(project_dir: Path) -> bool:
+    prompt = (
+        f"Project directory {project_dir} already exists. "
+        "Remove it and reinitialize? [y/N]: "
+    )
+    answer = input(prompt).strip().lower()
+    return answer in {"y", "yes"}
+
+
 def initialize_project(
     project_name: str,
     project_root: str,
     hector_home: str,
-    overwrite_config: bool,
     overwrite_registry: bool,
 ) -> Path:
     validate_project_name(project_name)
 
     base_dir = Path(project_root).expanduser().resolve()
     project_dir = base_dir / project_name
+
+    if project_dir.exists():
+        if not confirm_reinitialize(project_dir):
+            raise FileExistsError(f"Project initialization cancelled for {project_dir}.")
+        shutil.rmtree(project_dir)
+
     project_dir.mkdir(parents=True, exist_ok=True)
 
     for relative_dir in DEFAULT_SUBDIRECTORIES:
         (project_dir / relative_dir).mkdir(parents=True, exist_ok=True)
 
     config_path = project_dir / "config" / "config.yaml"
-    if config_path.exists() and not overwrite_config:
-        raise FileExistsError(
-            f"{config_path} already exists. Use --overwrite-config to replace it."
-        )
-
     config_path.write_text(
         render_yaml(project_name, project_dir, Path(hector_home).expanduser()),
         encoding="utf-8",
@@ -143,7 +148,6 @@ def main() -> int:
             project_name=args.project_name,
             project_root=args.project_root,
             hector_home=args.hector_home,
-            overwrite_config=args.overwrite_config,
             overwrite_registry=args.overwrite_registry,
         )
     except (ValueError, FileExistsError) as exc:

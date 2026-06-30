@@ -66,7 +66,6 @@ Optional arguments:
 - `--project-root /path/to/projects_base` to choose where the project directory is created.
 - `--hector-home /path/to/hector` to override the default HECTOR location.
 - `--overwrite-registry` to replace an existing project name mapping in `project_registry.json`.
-- `--overwrite-config` to regenerate an existing `config/config.yaml`.
 
 Default HECTOR path written to the config:
 
@@ -90,3 +89,25 @@ Each initialized project currently contains:
 The generated `config.yaml` stores general analysis options and paths to HECTOR executables and input files.
 
 Each initialized project is also registered in `project_registry.json`, so future scripts can resolve a project name to its actual location even when projects are stored outside this repository.
+
+If the target project directory already exists, the initializer asks whether it should remove the previous directory and recreate it from scratch.
+
+## Import original files
+
+Copy all files from a source directory into a project's `ori_files/` directory:
+
+```bash
+copy-original-files my_project /path/to/source_directory
+```
+
+Equivalent direct Python entrypoint:
+
+```bash
+python3 scripts/copy_original_files.py my_project /path/to/source_directory
+```
+
+Optional arguments:
+
+- `--overwrite` to replace existing files in `ori_files/` without prompting.
+
+Without `--overwrite`, the script asks before replacing each existing file.

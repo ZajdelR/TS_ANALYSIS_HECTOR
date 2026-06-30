@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 
 [project.scripts]
 initiate-project = "scripts.init_project:main"
+copy-original-files = "scripts.copy_original_files:main"
 
 [tool.setuptools]
 py-modules = ["main"]
