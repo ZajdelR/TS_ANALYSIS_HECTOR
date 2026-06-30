@@ -244,9 +244,10 @@ Outputs:
 - aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
 - PNG time-series and PSD plots in `fil_files/data_figures/` and `fil_files/psd_figures/`
   : per-component PSD plots include both the standard `*_psd.png` view and `*_psd_days.png`
+  : `*_psd_days.png` is based on a Lomb-Scargle periodogram with period in days and amplitude in mm
 - combined station subplot figures across available `_0/_1/_2` components when they exist
   : `components_data` is arranged as North, East, Up subplots and includes model annotations
   : `components_psd` is also written as a grouped PSD figure for the available components
-  : `components_psd_days` adds the period-in-days view with log-scaled x axis
+  : `components_psd_days` adds the Lomb-Scargle period-in-days view with log-scaled x axis
   : fitted trend, uncertainty, fitted signals, and fitted noise parameters are shown when available
 - Markdown station summary reports in `fil_files/reports/`

@@ -14,6 +14,8 @@ import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
+from scipy.signal import lombscargle
 
 try:
     from scripts.project_config import load_project_config
@@ -363,6 +365,26 @@ def read_mom_series(mom_path: Path) -> tuple[list[float], list[float], list[floa
     return x_values, data_values, model_values
 
 
+def read_mom_series_with_mjd(mom_path: Path) -> tuple[list[float], list[float], list[float], list[float]]:
+    mjd_values: list[float] = []
+    x_values: list[float] = []
+    data_values: list[float] = []
+    model_values: list[float] = []
+    with mom_path.open(encoding="utf-8") as fp:
+        for line in fp:
+            if not line.strip() or line.startswith("#"):
+                continue
+            columns = line.split()
+            if len(columns) < 3:
+                continue
+            mjd = float(columns[0])
+            mjd_values.append(mjd)
+            x_values.append((mjd - 51544.0) / 365.25 + 2000.0)
+            data_values.append(float(columns[1]))
+            model_values.append(float(columns[2]))
+    return mjd_values, x_values, data_values, model_values
+
+
 def read_two_column_file(path: Path) -> tuple[list[float], list[float]]:
     xs: list[float] = []
     ys: list[float] = []
@@ -654,35 +676,45 @@ def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
 
 
 def make_psd_period_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
-    estimatespectrum_x, estimatespectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
-    modelspectrum_x, modelspectrum_y = read_two_column_file(work_dir / "modelspectrum.out")
-    percentiles_x, percentiles_low, percentiles_high = read_four_column_file(
-        work_dir / "modelspectrum_percentiles.out"
-    )
+    del work_dir
+    raise RuntimeError("make_psd_period_plot requires a MOM path; call make_lomb_scargle_period_plot instead.")
 
-    seconds_per_year = 31557600.0
+
+def compute_lomb_scargle_periodogram(
+    mom_path: Path,
+    min_period_days: float | None = None,
+    max_period_days: float | None = None,
+    number_of_samples: int = 600,
+) -> tuple[np.ndarray, np.ndarray]:
+    mjd_values, _years, data_values, model_values = read_mom_series_with_mjd(mom_path)
+    if len(mjd_values) < 5:
+        raise ValueError(f"Not enough samples for Lomb-Scargle plot: {mom_path}")
+
+    times = np.asarray(mjd_values, dtype=float)
+    residuals = np.asarray(data_values, dtype=float) - np.asarray(model_values, dtype=float)
+    residuals = residuals - np.mean(residuals)
+    times = times - times.min()
+
+    if min_period_days is None:
+        sampling_period, _mjd0, _mjd1, _n = read_sampling_info(mom_path)
+        min_period_days = max(2.0 * sampling_period, 2.0)
+    if max_period_days is None:
+        span_days = float(times.max())
+        max_period_days = max(min_period_days * 1.5, span_days)
+
+    periods = np.logspace(np.log10(min_period_days), np.log10(max_period_days), number_of_samples)
+    angular_frequencies = 2.0 * np.pi / periods
+    power = lombscargle(times, residuals, angular_frequencies, precenter=False, normalize=False)
+    amplitudes = 2.0 * np.sqrt(np.maximum(power, 0.0) / len(times))
+    return periods, amplitudes
+
+
+def make_lomb_scargle_period_plot(station: str, mom_path: Path, figure_dir: Path) -> None:
+    periods, amplitudes = compute_lomb_scargle_periodogram(mom_path)
     figure_dir.mkdir(parents=True, exist_ok=True)
 
-    def to_period_amplitude(xs: list[float], ys: list[float]) -> tuple[list[float], list[float]]:
-        periods: list[float] = []
-        amplitudes: list[float] = []
-        for x_value, y_value in zip(xs, ys):
-            if x_value <= 0.0:
-                continue
-            periods.append(seconds_per_year / x_value / 86400.0)
-            amplitudes.append(math.sqrt(max(y_value / seconds_per_year, 0.0)))
-        return periods, amplitudes
-
-    est_x, est_y = to_period_amplitude(estimatespectrum_x, estimatespectrum_y)
-    model_x, model_y = to_period_amplitude(modelspectrum_x, modelspectrum_y)
-    pct_x, pct_low = to_period_amplitude(percentiles_x, percentiles_low)
-    _, pct_high = to_period_amplitude(percentiles_x, percentiles_high)
-
     plt.figure(figsize=(7, 5))
-    plt.semilogx(est_x, est_y, ".", markersize=4, label="Estimate")
-    plt.semilogx(model_x, model_y, "-", linewidth=1.5, label="Model")
-    plt.semilogx(pct_x, pct_low, "--", linewidth=1.0, label="Percentiles")
-    plt.semilogx(pct_x, pct_high, "--", linewidth=1.0)
+    plt.semilogx(periods, amplitudes, "-", linewidth=1.3, label="Lomb-Scargle")
     plt.xlabel("Period (days)")
     plt.ylabel("Amplitude (mm)")
     plt.tight_layout()
@@ -770,7 +802,6 @@ def make_station_component_psd_period_plot(
     component_results: list[dict[str, object]],
     figure_dir: Path,
 ) -> None:
-    seconds_per_year = 31557600.0
     figure_dir.mkdir(parents=True, exist_ok=True)
     ordered_results = sorted(
         component_results,
@@ -780,48 +811,18 @@ def make_station_component_psd_period_plot(
     if len(ordered_results) == 1:
         axes = [axes]
 
-    def to_period_amplitude(xs: list[float], ys: list[float]) -> tuple[list[float], list[float]]:
-        periods: list[float] = []
-        amplitudes: list[float] = []
-        for x_value, y_value in zip(xs, ys):
-            if x_value <= 0.0:
-                continue
-            periods.append(seconds_per_year / x_value / 86400.0)
-            amplitudes.append(math.sqrt(max(y_value / seconds_per_year, 0.0)))
-        return periods, amplitudes
-
     for axis, result in zip(axes, ordered_results):
         metadata = result["metadata"]
-        work_dir = Path(str(metadata["psd_cache_dir"]))
-        spectrum_x, spectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
-        model_x, model_y = read_two_column_file(work_dir / "modelspectrum.out")
-        percentile_x, percentile_low, percentile_high = read_four_column_file(
-            work_dir / "modelspectrum_percentiles.out"
-        )
+        mom_path = Path(str(metadata["mom_path"]))
+        periods, amplitudes = compute_lomb_scargle_periodogram(mom_path)
         component_label = str(metadata["component_label"])
 
         axis.semilogx(
-            *to_period_amplitude(spectrum_x, spectrum_y),
-            ".",
-            markersize=3,
-            label="Estimate",
-        )
-        axis.semilogx(
-            *to_period_amplitude(model_x, model_y),
+            periods,
+            amplitudes,
             "-",
             linewidth=1.2,
-            label=format_model_legend(result["estimatetrend"]),
-        )
-        axis.semilogx(
-            *to_period_amplitude(percentile_x, percentile_low),
-            "--",
-            linewidth=1.0,
-            label="Percentiles",
-        )
-        axis.semilogx(
-            *to_period_amplitude(percentile_x, percentile_high),
-            "--",
-            linewidth=1.0,
+            label="Lomb-Scargle",
         )
         axis.set_ylabel("Amplitude")
         axis.set_title(component_label)
@@ -973,7 +974,6 @@ def analyse_station(
         )
 
         make_psd_plot(station, temp_dir, psd_figure_dir)
-        make_psd_period_plot(station, temp_dir, psd_figure_dir)
         make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
         psd_cache_dir = fil_dir / "psd_cache"
         psd_cache_dir.mkdir(parents=True, exist_ok=True)
@@ -997,8 +997,10 @@ def analyse_station(
         "data_plot": str(data_figure_dir / f"{station}_data.png"),
         "residual_plot": str(data_figure_dir / f"{station}_res.png"),
         "psd_plot": str(psd_figure_dir / f"{station}_psd.png"),
+        "psd_days_plot": str(psd_figure_dir / f"{station}_psd_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
     }
+    make_lomb_scargle_period_plot(station, mom_dir / f"{station}.mom", psd_figure_dir)
     return estimatetrend_json, removeoutliers_json, metadata
 
 
