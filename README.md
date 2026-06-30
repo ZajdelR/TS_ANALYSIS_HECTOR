@@ -180,3 +180,40 @@ For each input `.neu` file, the script writes:
 - `_0.mom` for East
 - `_1.mom` for North
 - `_2.mom` for Up
+
+## Analyse and plot
+
+Run a project-aware adaptation of Hector's `analyse_and_plot.py` on the MOM
+files in `raw_files/`:
+
+```bash
+analyse-and-plot my_project --noise-model PLWN
+```
+
+To analyse only one station/component file:
+
+```bash
+analyse-and-plot my_project --noise-model PLWN --station station_0
+```
+
+Equivalent direct Python entrypoint:
+
+```bash
+python3 scripts/analyse_and_plot_project.py my_project --noise-model PLWN
+```
+
+Optional arguments:
+
+- `--station station_0` to process one `.mom` stem from `raw_files/`.
+- `--freq 0.0172` to add an extra periodic signal frequency.
+
+Runtime note:
+
+- the configured HECTOR binaries must be executable, for example `chmod +x /home/radek/app/hector/*`
+
+Outputs:
+
+- cleaned files in `pre_files/`
+- analysed MOM files in `mom_files/`
+- aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
+- PNG time-series and PSD plots in `fil_files/data_figures/` and `fil_files/psd_figures/`
