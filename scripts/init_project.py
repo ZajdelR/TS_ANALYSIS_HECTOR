@@ -97,13 +97,17 @@ def render_yaml(project_name: str, project_dir: Path, hector_home: Path) -> str:
     )
 
 
-def confirm_reinitialize(project_dir: Path) -> bool:
+def choose_reinitialize_mode(project_dir: Path) -> str:
     prompt = (
         f"Project directory {project_dir} already exists. "
-        "Remove it and reinitialize? [y/N]: "
+        "Choose: [r]emove and reinitialize, [c]onfig only, or [n] cancel: "
     )
     answer = input(prompt).strip().lower()
-    return answer in {"y", "yes"}
+    if answer in {"r", "remove"}:
+        return "remove"
+    if answer in {"c", "config"}:
+        return "config_only"
+    return "cancel"
 
 
 def copy_example_hector_config(project_dir: Path) -> None:
@@ -130,9 +134,11 @@ def initialize_project(
     project_dir = base_dir / project_name
 
     if project_dir.exists():
-        if not confirm_reinitialize(project_dir):
+        mode = choose_reinitialize_mode(project_dir)
+        if mode == "cancel":
             raise FileExistsError(f"Project initialization cancelled for {project_dir}.")
-        shutil.rmtree(project_dir)
+        if mode == "remove":
+            shutil.rmtree(project_dir)
 
     project_dir.mkdir(parents=True, exist_ok=True)
 

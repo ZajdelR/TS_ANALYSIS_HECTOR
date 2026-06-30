@@ -91,7 +91,11 @@ The generated `config.yaml` stores general analysis options and paths to HECTOR 
 
 Each initialized project is also registered in `project_registry.json`, so future scripts can resolve a project name to its actual location even when projects are stored outside this repository.
 
-If the target project directory already exists, the initializer asks whether it should remove the previous directory and recreate it from scratch.
+If the target project directory already exists, the initializer offers three choices:
+
+- remove the whole project directory and recreate it
+- keep the existing directories and refresh only `config/config.yaml` plus `config/hector/`
+- cancel initialization
 
 ## Import original files
 
