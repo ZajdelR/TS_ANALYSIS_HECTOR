@@ -12,6 +12,7 @@ requires-python = ">=3.12"
 initiate-project = "scripts.init_project:main"
 copy-original-files = "scripts.copy_original_files:main"
 convert-dat-to-neu = "scripts.convert_dat_to_neu:main"
+convert-neu-to-mom = "scripts.convert_neu_to_mom:main"
 
 [tool.setuptools]
 py-modules = ["main"]

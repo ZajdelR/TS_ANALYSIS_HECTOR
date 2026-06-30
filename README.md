@@ -143,3 +143,36 @@ The generated `.neu` files follow this convention:
 
 - column 1: time as year-fraction
 - columns 2-4: North, East, Up in metres
+
+## Convert NEU to MOM
+
+Convert `.neu` files from a project's `ori_files/` directory into `.mom` files in
+`raw_files/`:
+
+```bash
+convert-neu-to-mom my_project
+```
+
+To convert only one file:
+
+```bash
+convert-neu-to-mom my_project --filename station.neu
+```
+
+Equivalent direct Python entrypoint:
+
+```bash
+python3 scripts/convert_neu_to_mom.py my_project
+```
+
+Optional arguments:
+
+- `--filename station.neu` to convert a single file from `ori_files/`.
+- `--sampling-period 1.0` to control the `# sampling period` header.
+- `--overwrite` to replace existing `.mom` files without prompting.
+
+For each input `.neu` file, the script writes:
+
+- `_0.mom` for East
+- `_1.mom` for North
+- `_2.mom` for Up
