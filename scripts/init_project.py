@@ -10,38 +10,43 @@ from pathlib import Path
 
 try:
     from scripts.project_registry import register_project
+    from scripts.project_config import load_simple_yaml
 except ModuleNotFoundError:
     from project_registry import register_project
+    from project_config import load_simple_yaml
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-PROJECTS_DIR = Path("/data/GNSS/hector-projects/")
 EXAMPLE_HECTOR_CONFIG_DIR = ROOT_DIR / "example_hector_config"
+MACHINE_CONFIG_PATH = ROOT_DIR / "machine_config.yaml"
+MACHINE_CONFIG = load_simple_yaml(MACHINE_CONFIG_PATH)
 
 DEFAULT_SUBDIRECTORIES = (
     "config",
-    "ori_files",
-    "raw_files",
-    "obs_files",
-    "pre_files",
-    "mom_files",
-    "sea_files",
-    "fil_files",
+    str(MACHINE_CONFIG["paths"]["ori_files_dir"]),
+    str(MACHINE_CONFIG["paths"]["raw_files_dir"]),
+    str(MACHINE_CONFIG["paths"]["obs_files_dir"]),
+    str(MACHINE_CONFIG["paths"]["pre_files_dir"]),
+    str(MACHINE_CONFIG["paths"]["mom_files_dir"]),
+    str(MACHINE_CONFIG["paths"]["sea_files_dir"]),
+    str(MACHINE_CONFIG["paths"]["fil_files_dir"]),
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
+    default_project_root = str(MACHINE_CONFIG["defaults"]["project_root"])
+    default_hector_home = str(MACHINE_CONFIG["defaults"]["hector_home"])
     parser = argparse.ArgumentParser(
         description="Initialize a new time-series analysis project for HECTOR."
     )
     parser.add_argument("project_name", help="Project directory name inside projects/.")
     parser.add_argument(
         "--project-root",
-        default=str(PROJECTS_DIR),
+        default=default_project_root,
         help="Base directory where the project directory will be created.",
     )
     parser.add_argument(
         "--hector-home",
-        default="/home/rade/HECTOR_TEMP/",
+        default=default_hector_home,
         help="Base path that contains HECTOR executables and resources.",
     )
     parser.add_argument(
@@ -61,36 +66,40 @@ def validate_project_name(project_name: str) -> str:
     return project_name
 
 
-def render_yaml(project_name: str, project_dir: Path, hector_home: Path) -> str:
+def render_yaml(project_name: str, hector_home: Path) -> str:
+    analysis = MACHINE_CONFIG["analysis"]
+    paths = MACHINE_CONFIG["paths"]
+    files = MACHINE_CONFIG["files"]
+    notes = MACHINE_CONFIG["notes"]
     return "\n".join(
         (
             f'project_name: "{project_name}"',
             "analysis:",
-            "  reference_frame: \"IGS14\"",
-            "  sampling_period_days: 1.0",
-            "  noise_model: \"plwn\"",
-            "  estimate_offsets: true",
-            "  estimate_seasonal_signals: true",
-            "  use_outlier_detection: true",
+            f'  reference_frame: "{analysis["reference_frame"]}"',
+            f'  sampling_period_days: {analysis["sampling_period_days"]}',
+            f'  noise_model: "{analysis["noise_model"]}"',
+            f'  estimate_offsets: {str(analysis["estimate_offsets"]).lower()}',
+            f'  estimate_seasonal_signals: {str(analysis["estimate_seasonal_signals"]).lower()}',
+            f'  use_outlier_detection: {str(analysis["use_outlier_detection"]).lower()}',
             "paths:",
-            '  project_root: "."',
-            '  ori_files_dir: "ori_files"',
-            '  raw_files_dir: "raw_files"',
-            '  obs_files_dir: "obs_files"',
-            '  pre_files_dir: "pre_files"',
-            '  mom_files_dir: "mom_files"',
-            '  sea_files_dir: "sea_files"',
-            '  fil_files_dir: "fil_files"',
+            f'  project_root: "{paths["project_root"]}"',
+            f'  ori_files_dir: "{paths["ori_files_dir"]}"',
+            f'  raw_files_dir: "{paths["raw_files_dir"]}"',
+            f'  obs_files_dir: "{paths["obs_files_dir"]}"',
+            f'  pre_files_dir: "{paths["pre_files_dir"]}"',
+            f'  mom_files_dir: "{paths["mom_files_dir"]}"',
+            f'  sea_files_dir: "{paths["sea_files_dir"]}"',
+            f'  fil_files_dir: "{paths["fil_files_dir"]}"',
             f'  hector_home: "{hector_home}"',
             f'  hector_estimatetrend: "{hector_home / "estimatetrend"}"',
             f'  hector_removeoutliers: "{hector_home / "removeoutliers"}"',
             f'  hector_estimatespectrum: "{hector_home / "estimatespectrum"}"',
             "files:",
-            '  station_timeseries: ""',
-            '  offsets_catalog: ""',
-            '  postseismic_catalog: ""',
+            f'  station_timeseries: "{files["station_timeseries"]}"',
+            f'  offsets_catalog: "{files["offsets_catalog"]}"',
+            f'  postseismic_catalog: "{files["postseismic_catalog"]}"',
             "notes:",
-            '  description: ""',
+            f'  description: "{notes["description"]}"',
             '  created_by: "init_project.py"',
             "",
         )
@@ -147,7 +156,7 @@ def initialize_project(
 
     config_path = project_dir / "config" / "config.yaml"
     config_path.write_text(
-        render_yaml(project_name, project_dir, Path(hector_home).expanduser()),
+        render_yaml(project_name, Path(hector_home).expanduser()),
         encoding="utf-8",
     )
     copy_example_hector_config(project_dir)

@@ -24,11 +24,9 @@ def _parse_scalar(value: str) -> object:
         return text
 
 
-def load_project_config(project_name: str) -> tuple[Path, dict[str, dict[str, object]]]:
-    project_dir = resolve_project_path(project_name).resolve()
-    config_path = project_dir / "config" / "config.yaml"
+def load_simple_yaml(config_path: Path) -> dict[str, dict[str, object]]:
     if not config_path.exists():
-        raise FileNotFoundError(f"Project config does not exist: {config_path}")
+        raise FileNotFoundError(f"Config does not exist: {config_path}")
 
     config: dict[str, dict[str, object]] = {}
     current_section: str | None = None
@@ -50,4 +48,10 @@ def load_project_config(project_name: str) -> tuple[Path, dict[str, dict[str, ob
             config[key] = {}
             current_section = key
 
-    return project_dir, config
+    return config
+
+
+def load_project_config(project_name: str) -> tuple[Path, dict[str, dict[str, object]]]:
+    project_dir = resolve_project_path(project_name).resolve()
+    config_path = project_dir / "config" / "config.yaml"
+    return project_dir, load_simple_yaml(config_path)

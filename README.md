@@ -2,6 +2,18 @@
 
 Repository for running time-series analysis workflows with HECTOR.
 
+## Machine config
+
+[`machine_config.yaml`](/home/radek/PYTHON_PROJECTS/TS_ANALYSIS_HECTOR/machine_config.yaml) is the machine-level template used to generate new project configs.
+
+Edit it to match your machine before creating projects, especially:
+
+- `defaults.project_root`
+- `defaults.hector_home`
+- any common analysis defaults under `analysis`
+
+`initiate-project` reads this file and uses it as the base for each new `config/config.yaml`. Command-line options such as `--project-root` and `--hector-home` still override the machine config for one-off runs.
+
 ## Repository layout
 
 - `scripts/` contains executable helper scripts.

@@ -1,0 +1,25 @@
+defaults:
+  project_root: "/data/GNSS/hector-projects/"
+  hector_home: "/home/radek/HECTOR_TEMP/"
+analysis:
+  reference_frame: "IGS20"
+  sampling_period_days: 1.0
+  noise_model: "plwn"
+  estimate_offsets: true
+  estimate_seasonal_signals: true
+  use_outlier_detection: true
+paths:
+  project_root: "."
+  ori_files_dir: "ori_files"
+  raw_files_dir: "raw_files"
+  obs_files_dir: "obs_files"
+  pre_files_dir: "pre_files"
+  mom_files_dir: "mom_files"
+  sea_files_dir: "sea_files"
+  fil_files_dir: "fil_files"
+files:
+  station_timeseries: ""
+  offsets_catalog: ""
+  postseismic_catalog: ""
+notes:
+  description: ""
