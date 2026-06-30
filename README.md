@@ -48,7 +48,13 @@ Create a new project scaffold using the installed command alias:
 initiate-project my_project
 ```
 
-To place a project outside the repository, point to a different base directory:
+Default project root used by `initiate-project`:
+
+```text
+/data/GNSS/hector-projects/
+```
+
+To place a project somewhere else, point to a different base directory:
 
 ```bash
 initiate-project my_project --project-root /data/hector_ts

@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     from project_registry import register_project
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-PROJECTS_DIR = ROOT_DIR / "projects"
+PROJECTS_DIR = Path("/data/GNSS/hector-projects/")
 EXAMPLE_HECTOR_CONFIG_DIR = ROOT_DIR / "example_hector_config"
 
 DEFAULT_SUBDIRECTORIES = (
