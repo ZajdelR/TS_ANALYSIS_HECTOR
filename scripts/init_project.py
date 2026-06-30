@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--hector-home",
-        default="/home/radek/app/hector",
+        default="/home/rade/HECTOR_TEMP/",
         help="Base path that contains HECTOR executables and resources.",
     )
     parser.add_argument(
@@ -73,7 +73,7 @@ def render_yaml(project_name: str, project_dir: Path, hector_home: Path) -> str:
             "  estimate_seasonal_signals: true",
             "  use_outlier_detection: true",
             "paths:",
-            f'  project_root: "{project_dir}"',
+            '  project_root: "."',
             '  ori_files_dir: "ori_files"',
             '  raw_files_dir: "raw_files"',
             '  obs_files_dir: "obs_files"',

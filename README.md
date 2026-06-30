@@ -70,7 +70,7 @@ Optional arguments:
 Default HECTOR path written to the config:
 
 ```text
-/home/radek/app/hector
+/home/rade/HECTOR_TEMP/
 ```
 
 ## Generated project structure
@@ -209,7 +209,7 @@ Optional arguments:
 
 Runtime note:
 
-- the configured HECTOR binaries must be executable, for example `chmod +x /home/radek/app/hector/*`
+- the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
 
 Outputs:
 
