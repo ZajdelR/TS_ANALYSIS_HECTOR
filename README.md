@@ -205,23 +205,24 @@ Run a project-aware adaptation of Hector's `analyse_and_plot.py` on the MOM
 files in `raw_files/`:
 
 ```bash
-analyse-and-plot my_project --noise-model PLWN
+analyse-and-plot my_project
 ```
 
 To analyse only one station/component file:
 
 ```bash
-analyse-and-plot my_project --noise-model PLWN --station station_0
+analyse-and-plot my_project --station station_0
 ```
 
 Equivalent direct Python entrypoint:
 
 ```bash
-python3 scripts/analyse_and_plot_project.py my_project --noise-model PLWN
+python3 scripts/analyse_and_plot_project.py my_project
 ```
 
 Optional arguments:
 
+- `--noise-model PLWN` to override `analysis.noise_model` from the project config.
 - `--station station_0` to process one `.mom` stem from `raw_files/`.
 - `--freq 0.0172` to add an extra periodic signal frequency.
 

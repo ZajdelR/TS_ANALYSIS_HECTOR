@@ -27,8 +27,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("project_name", help="Registered project name.")
     parser.add_argument(
         "--noise-model",
-        required=True,
-        help="Noise model abbreviation string, e.g. PLWN or WN.",
+        default="",
+        help="Optional override for the noise model abbreviation string from config.",
     )
     parser.add_argument(
         "--station",
@@ -726,6 +726,11 @@ def analyse_project(
     freq: float,
 ) -> tuple[Path, int]:
     project_dir, config = load_project_config(project_name)
+    if not noise_model:
+        noise_model_value = config["analysis"].get("noise_model")
+        if not isinstance(noise_model_value, str) or not noise_model_value:
+            raise ValueError("No noise model provided and analysis.noise_model is missing in config.")
+        noise_model = noise_model_value
     raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
     mom_files = collect_station_files(raw_dir, station)
 
