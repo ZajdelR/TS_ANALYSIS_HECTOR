@@ -44,6 +44,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Extra periodic signal frequency.",
     )
+    parser.add_argument(
+        "--fit-seasonal",
+        action="store_true",
+        help="Set seasonalsignal to yes for this run.",
+    )
+    parser.add_argument(
+        "--fit-halfseasonal",
+        action="store_true",
+        help="Set halfseasonalsignal to yes for this run.",
+    )
     return parser
 
 
@@ -160,12 +170,16 @@ def create_removeoutliers_ctl_file(
     raw_dir: Path,
     pre_dir: Path,
     freq: float,
+    fit_seasonal: bool,
+    fit_halfseasonal: bool,
 ) -> None:
     settings = load_ctl_template(template_path)
     settings["DataFile"] = f"{station}.mom"
     settings["DataDirectory"] = str(raw_dir)
     settings["OutputFile"] = str(pre_dir / f"{station}.mom")
     settings["JSON"] = "yes"
+    settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
+    settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
     if freq > 0.0:
         settings["periodicsignals"] = f"{freq:f}"
     write_ctl_file(ctl_path, settings)
@@ -179,6 +193,8 @@ def create_estimatetrend_ctl_file(
     mom_dir: Path,
     noisemodels: list[str],
     freq: float,
+    fit_seasonal: bool,
+    fit_halfseasonal: bool,
 ) -> None:
     settings = load_ctl_template(template_path)
     settings["DataFile"] = f"{station}.mom"
@@ -217,6 +233,8 @@ def create_estimatetrend_ctl_file(
             settings["MA_q"] = "0"
 
     settings["NoiseModels"] = names.lstrip()
+    settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
+    settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
     if need_1mphi and "GGM_1mphi" not in settings:
         settings["GGM_1mphi"] = "6.9e-06"
     if need_varying_phi and "phi_varying_fixed" not in settings:
@@ -911,6 +929,8 @@ def analyse_station(
     config: dict[str, dict[str, object]],
     noise_model: str,
     freq: float,
+    fit_seasonal: bool,
+    fit_halfseasonal: bool,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     paths = config["paths"]
     hector_removeoutliers = Path(str(paths["hector_removeoutliers"]))
@@ -952,6 +972,8 @@ def analyse_station(
             raw_dir,
             pre_dir,
             freq,
+            fit_seasonal,
+            fit_halfseasonal,
         )
         run_command(
             [str(hector_removeoutliers)],
@@ -968,6 +990,8 @@ def analyse_station(
             mom_dir,
             noisemodels,
             freq,
+            fit_seasonal,
+            fit_halfseasonal,
         )
         run_command(
             [str(hector_estimatetrend)],
@@ -1147,6 +1171,8 @@ def analyse_project(
     noise_model: str,
     station: str,
     freq: float,
+    fit_seasonal: bool,
+    fit_halfseasonal: bool,
 ) -> tuple[Path, int]:
     project_dir, config = load_project_config(project_name)
     if not noise_model:
@@ -1163,7 +1189,13 @@ def analyse_project(
     for mom_file in mom_files:
         station_name = mom_file.stem
         est_json, rem_json, metadata = analyse_station(
-            station_name, project_dir, config, noise_model, freq
+            station_name,
+            project_dir,
+            config,
+            noise_model,
+            freq,
+            fit_seasonal,
+            fit_halfseasonal,
         )
         estimatetrend_results[station_name] = est_json
         removeoutliers_results[station_name] = rem_json
@@ -1214,6 +1246,8 @@ def main() -> int:
             noise_model=args.noise_model,
             station=args.station,
             freq=args.freq,
+            fit_seasonal=args.fit_seasonal,
+            fit_halfseasonal=args.fit_halfseasonal,
         )
     except (FileNotFoundError, ValueError, KeyError, RuntimeError) as exc:
         parser.error(str(exc))

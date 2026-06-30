@@ -232,11 +232,14 @@ Optional arguments:
 - `--noise-model PLWN` to override `analysis.noise_model` from the project config.
 - `--station station` to process one station marker and include all matching component files.
 - `--freq 0.0172` to add an extra periodic signal frequency.
+- `--fit-seasonal` to force `seasonalsignal yes` for this run.
+- `--fit-halfseasonal` to force `halfseasonalsignal yes` for this run.
 
 Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
 - `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates and only overrides run-specific fields such as input/output paths and selected noise model
+- for seasonal fitting flags, the command explicitly sets `seasonalsignal` and `halfseasonalsignal`; if the flags are absent they are forced to `no`
 
 Outputs:
 
