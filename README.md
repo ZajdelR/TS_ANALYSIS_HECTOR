@@ -236,6 +236,7 @@ Optional arguments:
 Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
+- `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates and only overrides run-specific fields such as input/output paths and selected noise model
 
 Outputs:
 

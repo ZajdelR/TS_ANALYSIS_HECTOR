@@ -129,112 +129,118 @@ def get_component_sort_key(station_name: str) -> tuple[int, str]:
     return component_order.get(component_index, 99), station_name
 
 
+def load_ctl_template(template_path: Path) -> dict[str, str]:
+    settings: dict[str, str] = {}
+    if not template_path.exists():
+        return settings
+    for raw_line in template_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        columns = line.split(maxsplit=1)
+        key = columns[0]
+        value = columns[1] if len(columns) > 1 else ""
+        settings[key] = value
+    return settings
+
+
+def write_ctl_file(ctl_path: Path, settings: dict[str, str]) -> None:
+    with ctl_path.open("w", encoding="utf-8") as fp:
+        for key, value in settings.items():
+            if value:
+                fp.write(f"{key:<22} {value}\n")
+            else:
+                fp.write(f"{key}\n")
+
+
 def create_removeoutliers_ctl_file(
     ctl_path: Path,
+    template_path: Path,
     station: str,
     raw_dir: Path,
     pre_dir: Path,
     freq: float,
 ) -> None:
-    with ctl_path.open("w", encoding="utf-8") as fp:
-        fp.write(f"DataFile            {station}.mom\n")
-        fp.write(f"DataDirectory       {raw_dir}\n")
-        fp.write("interpolate         no\n")
-        fp.write(f"OutputFile          {pre_dir / f'{station}.mom'}\n")
-        fp.write("seasonalsignal      yes\n")
-        fp.write("halfseasonalsignal  yes\n")
-        if freq > 0.0:
-            fp.write(f"periodicsignals     {freq:f}\n")
-        fp.write("estimateoffsets     yes\n")
-        fp.write("estimatepostseismic yes\n")
-        fp.write("estimateslowslipevent yes\n")
-        fp.write("ScaleFactor         1.0\n")
-        fp.write("PhysicalUnit        mm\n")
-        fp.write("IQ_factor           3\n")
-        fp.write("JSON                yes\n")
+    settings = load_ctl_template(template_path)
+    settings["DataFile"] = f"{station}.mom"
+    settings["DataDirectory"] = str(raw_dir)
+    settings["OutputFile"] = str(pre_dir / f"{station}.mom")
+    settings["JSON"] = "yes"
+    if freq > 0.0:
+        settings["periodicsignals"] = f"{freq:f}"
+    write_ctl_file(ctl_path, settings)
 
 
 def create_estimatetrend_ctl_file(
     ctl_path: Path,
+    template_path: Path,
     station: str,
     pre_dir: Path,
     mom_dir: Path,
     noisemodels: list[str],
     freq: float,
 ) -> None:
-    with ctl_path.open("w", encoding="utf-8") as fp:
-        fp.write(f"DataFile              {station}.mom\n")
-        fp.write(f"DataDirectory         {pre_dir}\n")
-        fp.write(f"OutputFile            {mom_dir / f'{station}.mom'}\n")
-        fp.write("interpolate           no\n")
-        fp.write("PhysicalUnit          mm\n")
-        fp.write("ScaleFactor           1.0\n")
-        fp.write("JSON                  yes\n")
+    settings = load_ctl_template(template_path)
+    settings["DataFile"] = f"{station}.mom"
+    settings["DataDirectory"] = str(pre_dir)
+    settings["OutputFile"] = str(mom_dir / f"{station}.mom")
+    settings["JSON"] = "yes"
 
-        names = ""
-        need_1mphi = False
-        need_varying_phi = False
-        for noisemodel in noisemodels:
-            if noisemodel == "WN":
-                names += " White"
-            elif noisemodel in {"GGM", "fGGM"}:
-                names += " GGM"
-            elif noisemodel == "FN":
-                names += " FlickerGGM"
-                need_1mphi = True
-            elif noisemodel == "RW":
-                names += " RandomWalkGGM"
-                need_1mphi = True
-            elif noisemodel == "PL":
-                names += " GGM"
-                need_1mphi = True
-            elif noisemodel == "MT":
-                names += " Matern"
-            elif noisemodel == "VA":
-                names += " VaryingAnnual"
-                need_varying_phi = True
-            elif noisemodel == "VSA":
-                names += " VaryingSemiAnnual"
-                need_varying_phi = True
-            elif noisemodel == "AR1":
-                names += " ARMA"
-                fp.write("AR_p                  1\n")
-                fp.write("MA_q                  0\n")
+    names = ""
+    need_1mphi = False
+    need_varying_phi = False
+    for noisemodel in noisemodels:
+        if noisemodel == "WN":
+            names += " White"
+        elif noisemodel in {"GGM", "fGGM"}:
+            names += " GGM"
+        elif noisemodel == "FN":
+            names += " FlickerGGM"
+            need_1mphi = True
+        elif noisemodel == "RW":
+            names += " RandomWalkGGM"
+            need_1mphi = True
+        elif noisemodel == "PL":
+            names += " GGM"
+            need_1mphi = True
+        elif noisemodel == "MT":
+            names += " Matern"
+        elif noisemodel == "VA":
+            names += " VaryingAnnual"
+            need_varying_phi = True
+        elif noisemodel == "VSA":
+            names += " VaryingSemiAnnual"
+            need_varying_phi = True
+        elif noisemodel == "AR1":
+            names += " ARMA"
+            settings["AR_p"] = "1"
+            settings["MA_q"] = "0"
 
-        fp.write(f"NoiseModels           {names.lstrip()}\n")
-        if need_1mphi:
-            fp.write("GGM_1mphi             6.9e-06\n")
-        if need_varying_phi:
-            fp.write("phi_varying_fixed     0.9999\n")
-        if "fGGM" in noisemodels:
-            fp.write("GGM_1mphi             0.02\n")
-            fp.write("kappa_fixed           -1.0\n")
-
-        fp.write("seasonalsignal        yes\n")
-        fp.write("halfseasonalsignal    yes\n")
-        if freq > 0.0:
-            fp.write(f"periodicsignals       {freq:f}\n")
-        fp.write("estimateoffsets       yes\n")
-        fp.write("estimatepostseismic   yes\n")
-        fp.write("estimateslowslipevent yes\n")
-        fp.write("ScaleFactor           1.0\n")
-        fp.write("PhysicalUnit          mm\n")
+    settings["NoiseModels"] = names.lstrip()
+    if need_1mphi and "GGM_1mphi" not in settings:
+        settings["GGM_1mphi"] = "6.9e-06"
+    if need_varying_phi and "phi_varying_fixed" not in settings:
+        settings["phi_varying_fixed"] = "0.9999"
+    if "fGGM" in noisemodels:
+        settings["GGM_1mphi"] = settings.get("GGM_1mphi", "0.02")
+        settings["kappa_fixed"] = settings.get("kappa_fixed", "-1.0")
+    if freq > 0.0:
+        settings["periodicsignals"] = f"{freq:f}"
+    write_ctl_file(ctl_path, settings)
 
 
 def create_estimatespectrum_ctl_file(
     ctl_path: Path,
+    template_path: Path,
     station: str,
     mom_dir: Path,
     noise_model: str,
 ) -> None:
-    with ctl_path.open("w", encoding="utf-8") as fp:
-        fp.write(f"DataFile            {station}.mom\n")
-        fp.write(f"DataDirectory       {mom_dir}\n")
-        fp.write("interpolate         no\n")
-        fp.write(f"NoiseModels         {noise_model}\n")
-        fp.write("ScaleFactor         1.0\n")
-        fp.write("PhysicalUnit        mm\n")
-        fp.write("WindowFunction      Hann\n")
+    settings = load_ctl_template(template_path)
+    settings["DataFile"] = f"{station}.mom"
+    settings["DataDirectory"] = str(mom_dir)
+    settings["NoiseModels"] = noise_model
+    write_ctl_file(ctl_path, settings)
 
 
 def extract_optional_noise_parameters(ctl_path: Path) -> dict[str, float]:
@@ -252,6 +258,7 @@ def extract_optional_noise_parameters(ctl_path: Path) -> dict[str, float]:
 
 def create_modelspectrum_ctl_file(
     ctl_path: Path,
+    template_path: Path,
     station: str,
     mom_dir: Path,
     results: dict[str, object],
@@ -259,35 +266,27 @@ def create_modelspectrum_ctl_file(
     number_of_points: int,
     fixed_params: dict[str, float],
 ) -> None:
-    with ctl_path.open("w", encoding="utf-8") as fp:
-        fp.write(f"DataFile                {station}.mom\n")
-        fp.write(f"DataDirectory           {mom_dir}\n")
-        fp.write("ScaleFactor             1.0\n")
-        fp.write("PhysicalUnit            mm\n")
+    settings = load_ctl_template(template_path)
+    settings["DataFile"] = f"{station}.mom"
+    settings["DataDirectory"] = str(mom_dir)
 
-        noise_lst = ""
-        noises = results["NoiseModel"]
-        assert isinstance(noises, dict)
-        for noise in noises:
-            noise_lst += f" {noise}"
+    noise_lst = ""
+    noises = results["NoiseModel"]
+    assert isinstance(noises, dict)
+    for noise in noises:
+        noise_lst += f" {noise}"
 
-        if "GGM_1mphi" in fixed_params:
-            fp.write(f"GGM_1mphi             {fixed_params['GGM_1mphi']:e}\n")
-        if "kappa_fixed" in fixed_params:
-            fp.write(f"kappa_fixed           {fixed_params['kappa_fixed']:f}\n")
-        if "lambda_fixed" in fixed_params:
-            fp.write(f"lambda_fixed          {fixed_params['lambda_fixed']:e}\n")
+    if "GGM_1mphi" in fixed_params:
+        settings["GGM_1mphi"] = f"{fixed_params['GGM_1mphi']:e}"
+    if "kappa_fixed" in fixed_params:
+        settings["kappa_fixed"] = f"{fixed_params['kappa_fixed']:f}"
+    if "lambda_fixed" in fixed_params:
+        settings["lambda_fixed"] = f"{fixed_params['lambda_fixed']:e}"
 
-        fp.write(f"NoiseModels            {noise_lst.lstrip()}\n")
-        fp.write("AR_p                    1\n")
-        fp.write("MA_q                    0\n")
-        fp.write("TimeNoiseStart          1000\n")
-        fp.write("MonteCarloConfidence    yes\n")
-        fp.write("NumberOfSimulations     5000\n")
-        fp.write(f"SamplingPeriod          {sampling_period:f}\n")
-        fp.write(f"NumberOfPoints          {number_of_points:d}\n")
-        fp.write("NumberOfSegments        4\n")
-        fp.write("WindowFunction          Hann\n")
+    settings["NoiseModels"] = noise_lst.lstrip()
+    settings["SamplingPeriod"] = f"{sampling_period:f}"
+    settings["NumberOfPoints"] = f"{number_of_points:d}"
+    write_ctl_file(ctl_path, settings)
 
 
 def create_modelspectrum_input(
@@ -930,6 +929,7 @@ def analyse_station(
     pre_dir = project_dir / str(paths["pre_files_dir"])
     mom_dir = project_dir / str(paths["mom_files_dir"])
     fil_dir = project_dir / str(paths["fil_files_dir"])
+    hector_config_dir = project_dir / "config" / "hector"
     data_figure_dir = fil_dir / "data_figures"
     psd_figure_dir = fil_dir / "psd_figures"
 
@@ -945,7 +945,14 @@ def analyse_station(
         temp_dir = Path(temp_dir_name)
 
         removeoutliers_ctl = temp_dir / "removeoutliers.ctl"
-        create_removeoutliers_ctl_file(removeoutliers_ctl, station, raw_dir, pre_dir, freq)
+        create_removeoutliers_ctl_file(
+            removeoutliers_ctl,
+            hector_config_dir / "removeoutliers.ctl",
+            station,
+            raw_dir,
+            pre_dir,
+            freq,
+        )
         run_command(
             [str(hector_removeoutliers)],
             cwd=temp_dir,
@@ -953,7 +960,15 @@ def analyse_station(
         )
 
         estimatetrend_ctl = temp_dir / "estimatetrend.ctl"
-        create_estimatetrend_ctl_file(estimatetrend_ctl, station, pre_dir, mom_dir, noisemodels, freq)
+        create_estimatetrend_ctl_file(
+            estimatetrend_ctl,
+            hector_config_dir / "estimatetrend.ctl",
+            station,
+            pre_dir,
+            mom_dir,
+            noisemodels,
+            freq,
+        )
         run_command(
             [str(hector_estimatetrend)],
             cwd=temp_dir,
@@ -966,7 +981,13 @@ def analyse_station(
         sampling_period, _mjd0, _mjd1, number_of_points = read_sampling_info(mom_dir / f"{station}.mom")
 
         estimatespectrum_ctl = temp_dir / "estimatespectrum.ctl"
-        create_estimatespectrum_ctl_file(estimatespectrum_ctl, station, mom_dir, noise_model)
+        create_estimatespectrum_ctl_file(
+            estimatespectrum_ctl,
+            hector_config_dir / "estimatespectrum.ctl",
+            station,
+            mom_dir,
+            noise_model,
+        )
         output = subprocess.check_output([str(hector_estimatespectrum), "4"], cwd=temp_dir, text=True)
         estimatespectrum_cols = output.split()
         freq0 = estimatespectrum_cols[-5]
@@ -977,6 +998,7 @@ def analyse_station(
         modelspectrum_ctl = temp_dir / "modelspectrum.ctl"
         create_modelspectrum_ctl_file(
             modelspectrum_ctl,
+            hector_config_dir / "modelspectrum.ctl",
             station,
             mom_dir,
             estimatetrend_json,
