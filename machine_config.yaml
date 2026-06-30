@@ -4,7 +4,7 @@ defaults:
 analysis:
   reference_frame: "IGS20"
   sampling_period_days: 1.0
-  noise_model: "plwn"
+  noise_model: "PL+WN"
   estimate_offsets: true
   estimate_seasonal_signals: true
   use_outlier_detection: true

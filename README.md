@@ -43,6 +43,12 @@ If you add or change command aliases, reinstall the local package:
 python -m pip install -e .
 ```
 
+Repository-wide command help:
+
+```bash
+repo-help
+```
+
 Current core dependencies:
 
 - `python 3.12`
