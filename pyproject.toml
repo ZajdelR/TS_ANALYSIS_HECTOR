@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ts-analysis-hector"
+version = "0.1.0"
+description = "Time-series analysis helpers for HECTOR workflows."
+requires-python = ">=3.12"
+
+[project.scripts]
+initiate-project = "scripts.init_project:main"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["scripts"]

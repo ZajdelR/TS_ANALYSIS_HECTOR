@@ -15,12 +15,19 @@ Create the Conda environment from the repository file:
 ```bash
 conda env create -f environment.yml
 conda activate ts-analysis-hector
+python -m pip install -e .
 ```
 
 If you later update `environment.yml`, refresh the environment with:
 
 ```bash
 conda env update -f environment.yml --prune
+```
+
+If you add or change command aliases, reinstall the local package:
+
+```bash
+python -m pip install -e .
 ```
 
 Current core dependencies:
@@ -34,15 +41,16 @@ Current core dependencies:
 
 ## Initialize a project
 
-Create a new project scaffold under `projects/`:
+Create a new project scaffold under `projects/` using the installed command alias:
+
+```bash
+initiate-project my_project
+```
+
+Equivalent direct Python entrypoints:
 
 ```bash
 python3 scripts/init_project.py my_project
-```
-
-You can also use the top-level entrypoint:
-
-```bash
 python3 main.py my_project
 ```
 
