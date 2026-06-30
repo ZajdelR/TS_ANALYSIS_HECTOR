@@ -244,10 +244,10 @@ Outputs:
 - aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
 - PNG time-series and PSD plots in `fil_files/data_figures/` and `fil_files/psd_figures/`
   : per-component PSD plots include the standard `*_psd.png` view
-  : Lomb-Scargle period plots are written separately as `*_lomb_cleaned_days.png` and `*_lomb_residuals_days.png`
+  : Lomb-Scargle period plots are written separately as `*_lomb_signal_days.png` and `*_lomb_residuals_days.png`
 - combined station subplot figures across available `_0/_1/_2` components when they exist
   : `components_data` is arranged as North, East, Up subplots and includes model annotations
   : `components_psd` is also written as a grouped PSD figure for the available components
-  : grouped Lomb-Scargle plots are written as `*_components_lomb_cleaned_days.png` and `*_components_lomb_residuals_days.png`
+  : grouped Lomb-Scargle plots are written as `*_components_lomb_signal_days.png` and `*_components_lomb_residuals_days.png`
   : fitted trend, uncertainty, fitted signals, and fitted noise parameters are shown when available
 - Markdown station summary reports in `fil_files/reports/`

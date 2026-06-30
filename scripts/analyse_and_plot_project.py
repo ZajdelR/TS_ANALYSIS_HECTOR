@@ -711,8 +711,8 @@ def compute_lomb_scargle_periodogram(
     return periods, amplitudes
 
 
-def compute_cleaned_signal_periodogram(pre_path: Path) -> tuple[np.ndarray, np.ndarray]:
-    mjd_values, _years, data_values, _model_values = read_mom_series_with_mjd(pre_path)
+def compute_signal_periodogram(mom_path: Path) -> tuple[np.ndarray, np.ndarray]:
+    mjd_values, _years, data_values, _model_values = read_mom_series_with_mjd(mom_path)
     times = np.asarray(mjd_values, dtype=float)
     values = np.asarray(data_values, dtype=float)
     return compute_lomb_scargle_periodogram(times, values)
@@ -834,12 +834,11 @@ def make_station_component_lomb_plot(
 
     for axis, result in zip(axes, ordered_results):
         metadata = result["metadata"]
-        if kind == "cleaned":
-            source_path = Path(str(metadata["cleaned_mom_path"]))
-            periods, amplitudes = compute_cleaned_signal_periodogram(source_path)
-            label = "Lomb-Scargle cleaned"
+        source_path = Path(str(metadata["mom_path"]))
+        if kind == "signal":
+            periods, amplitudes = compute_signal_periodogram(source_path)
+            label = "Lomb-Scargle signal"
         else:
-            source_path = Path(str(metadata["mom_path"]))
             periods, amplitudes = compute_residual_periodogram(source_path)
             label = "Lomb-Scargle residuals"
         component_label = str(metadata["component_label"])
@@ -869,7 +868,7 @@ def make_station_component_lomb_plot(
 
     axes[-1].set_xlabel("Period (days)")
     fig.tight_layout()
-    suffix = "cleaned" if kind == "cleaned" else "residuals"
+    suffix = "signal" if kind == "signal" else "residuals"
     fig.savefig(figure_dir / f"{marker}_components_lomb_{suffix}_days.png", dpi=150)
     plt.close(fig)
 
@@ -1021,21 +1020,20 @@ def analyse_station(
     metadata = {
         "marker": get_station_marker(station),
         "component_label": get_component_label(station),
-        "cleaned_mom_path": str(pre_dir / f"{station}.mom"),
         "mom_path": str(mom_dir / f"{station}.mom"),
         "data_plot": str(data_figure_dir / f"{station}_data.png"),
         "residual_plot": str(data_figure_dir / f"{station}_res.png"),
         "psd_plot": str(psd_figure_dir / f"{station}_psd.png"),
-        "lomb_cleaned_plot": str(psd_figure_dir / f"{station}_lomb_cleaned_days.png"),
+        "lomb_signal_plot": str(psd_figure_dir / f"{station}_lomb_signal_days.png"),
         "lomb_residuals_plot": str(psd_figure_dir / f"{station}_lomb_residuals_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
     }
-    cleaned_periods, cleaned_amplitudes = compute_cleaned_signal_periodogram(pre_dir / f"{station}.mom")
+    signal_periods, signal_amplitudes = compute_signal_periodogram(mom_dir / f"{station}.mom")
     make_lomb_scargle_period_plot(
-        psd_figure_dir / f"{station}_lomb_cleaned_days.png",
-        cleaned_periods,
-        cleaned_amplitudes,
-        f"{station} cleaned signal",
+        psd_figure_dir / f"{station}_lomb_signal_days.png",
+        signal_periods,
+        signal_amplitudes,
+        f"{station} signal",
     )
     residual_periods, residual_amplitudes = compute_residual_periodogram(mom_dir / f"{station}.mom")
     make_lomb_scargle_period_plot(
@@ -1177,7 +1175,7 @@ def analyse_project(
             make_station_component_data_plot(marker, sorted_results, data_figure_dir)
             if all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
                 make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
-                make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "cleaned")
+                make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "signal")
                 make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
         write_station_summary_report(marker, report_dir, noise_model, freq, sorted_results)
 
