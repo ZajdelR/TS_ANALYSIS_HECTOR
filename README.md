@@ -241,8 +241,8 @@ Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
 - `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates and only overrides run-specific fields such as input/output paths and selected noise model
-- if `--fit-seasonal` is absent, `seasonalsignal` is taken from `analysis.estimate_seasonal_signals` in the project config
-- if `--fit-halfseasonal` is absent, `halfseasonalsignal` is taken from `analysis.estimate_halfseasonal_signals` in the project config
+- if `--fit-seasonal` is absent, the existing `seasonalsignal` value from the project `.ctl` template is preserved
+- if `--fit-halfseasonal` is absent, the existing `halfseasonalsignal` value from the project `.ctl` template is preserved
 - if either flag is provided, it forces the corresponding setting to `yes` for that run
 
 Outputs:

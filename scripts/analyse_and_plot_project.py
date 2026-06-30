@@ -172,16 +172,18 @@ def create_removeoutliers_ctl_file(
     raw_dir: Path,
     pre_dir: Path,
     freq: float,
-    fit_seasonal: bool,
-    fit_halfseasonal: bool,
+    fit_seasonal: bool | None,
+    fit_halfseasonal: bool | None,
 ) -> None:
     settings = load_ctl_template(template_path)
     settings["DataFile"] = f"{station}.mom"
     settings["DataDirectory"] = str(raw_dir)
     settings["OutputFile"] = str(pre_dir / f"{station}.mom")
     settings["JSON"] = "yes"
-    settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
-    settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
+    if fit_seasonal:
+        settings["seasonalsignal"] = "yes"
+    if fit_halfseasonal:
+        settings["halfseasonalsignal"] = "yes"
     if freq > 0.0:
         settings["periodicsignals"] = f"{freq:f}"
     write_ctl_file(ctl_path, settings)
@@ -195,8 +197,8 @@ def create_estimatetrend_ctl_file(
     mom_dir: Path,
     noisemodels: list[str],
     freq: float,
-    fit_seasonal: bool,
-    fit_halfseasonal: bool,
+    fit_seasonal: bool | None,
+    fit_halfseasonal: bool | None,
 ) -> None:
     settings = load_ctl_template(template_path)
     settings["DataFile"] = f"{station}.mom"
@@ -235,8 +237,10 @@ def create_estimatetrend_ctl_file(
             settings["MA_q"] = "0"
 
     settings["NoiseModels"] = names.lstrip()
-    settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
-    settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
+    if fit_seasonal:
+        settings["seasonalsignal"] = "yes"
+    if fit_halfseasonal:
+        settings["halfseasonalsignal"] = "yes"
     if need_1mphi and "GGM_1mphi" not in settings:
         settings["GGM_1mphi"] = "6.9e-06"
     if need_varying_phi and "phi_varying_fixed" not in settings:
@@ -1197,17 +1201,6 @@ def analyse_project(
         if not isinstance(noise_model_value, str) or not noise_model_value:
             raise ValueError("No noise model provided and analysis.noise_model is missing in config.")
         noise_model = noise_model_value
-    config_fit_seasonal = config["analysis"].get("estimate_seasonal_signals")
-    if not isinstance(config_fit_seasonal, bool):
-        raise ValueError("analysis.estimate_seasonal_signals is missing in config.")
-    if fit_seasonal is None:
-        fit_seasonal = config_fit_seasonal
-
-    config_fit_halfseasonal = config["analysis"].get("estimate_halfseasonal_signals")
-    if not isinstance(config_fit_halfseasonal, bool):
-        raise ValueError("analysis.estimate_halfseasonal_signals is missing in config.")
-    if fit_halfseasonal is None:
-        fit_halfseasonal = config_fit_halfseasonal
     raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
     mom_files = collect_station_files(raw_dir, station)
 
