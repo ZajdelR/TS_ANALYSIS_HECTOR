@@ -6,4 +6,5 @@ data/
 projects/
 
 # Windows metadata
-*.Zone.Identifier
+*:Zone.Identifier
+./*/*:Zone.Identifier

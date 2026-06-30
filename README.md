@@ -111,3 +111,34 @@ Optional arguments:
 - `--overwrite` to replace existing files in `ori_files/` without prompting.
 
 Without `--overwrite`, the script asks before replacing each existing file.
+
+## Convert DAT to NEU
+
+Convert `.dat` files from a project's `ori_files/` directory into `.neu` files in
+the same `ori_files/` directory:
+
+```bash
+convert-dat-to-neu my_project
+```
+
+To convert only one file:
+
+```bash
+convert-dat-to-neu my_project --filename station.dat
+```
+
+Equivalent direct Python entrypoint:
+
+```bash
+python3 scripts/convert_dat_to_neu.py my_project
+```
+
+Optional arguments:
+
+- `--filename station.dat` to convert a single file from `ori_files/`.
+- `--overwrite` to replace existing `.neu` files without prompting.
+
+The generated `.neu` files follow this convention:
+
+- column 1: time as year-fraction
+- columns 2-4: North, East, Up in metres

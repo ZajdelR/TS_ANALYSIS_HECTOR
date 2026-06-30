@@ -1,0 +1,14 @@
+DataFile                AREG_GAL.mom
+DataDirectory           ./mom_files
+ScaleFactor             1.0
+PhysicalUnit            mm
+NoiseModels             GGM
+AR_p                    1
+MA_q                    0
+TimeNoiseStart          1000
+MonteCarloConfidence    yes
+NumberOfSimulations     5000
+SamplingPeriod          1.000000
+NumberOfPoints          1826
+NumberOfSegments        4
+WindowFunction          Hann

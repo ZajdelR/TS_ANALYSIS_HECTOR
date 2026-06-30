@@ -1,0 +1,13 @@
+DataFile            AREG_GAL.mom
+DataDirectory         ./obs_files
+interpolate           no
+OutputFile            ./pre_files/AREG_GAL.mom
+seasonalsignal        yes
+halfseasonalsignal    yes
+estimateoffsets       yes
+estimatepostseismic   yes
+estimateslowslipevent yes
+ScaleFactor           1.0
+PhysicalUnit          mm
+IQ_factor             3
+JSON                  yes
