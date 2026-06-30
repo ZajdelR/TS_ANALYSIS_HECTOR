@@ -80,6 +80,7 @@ def render_yaml(project_name: str, hector_home: Path) -> str:
             f'  noise_model: "{analysis["noise_model"]}"',
             f'  estimate_offsets: {str(analysis["estimate_offsets"]).lower()}',
             f'  estimate_seasonal_signals: {str(analysis["estimate_seasonal_signals"]).lower()}',
+            f'  estimate_halfseasonal_signals: {str(analysis["estimate_halfseasonal_signals"]).lower()}',
             f'  use_outlier_detection: {str(analysis["use_outlier_detection"]).lower()}',
             "paths:",
             f'  project_root: "{paths["project_root"]}"',

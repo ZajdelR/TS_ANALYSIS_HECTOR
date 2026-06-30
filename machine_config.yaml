@@ -7,6 +7,7 @@ analysis:
   noise_model: "PLWN"
   estimate_offsets: true
   estimate_seasonal_signals: true
+  estimate_halfseasonal_signals: true
   use_outlier_detection: true
 paths:
   project_root: "."

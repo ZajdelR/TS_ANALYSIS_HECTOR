@@ -47,11 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fit-seasonal",
         action="store_true",
+        default=None,
         help="Set seasonalsignal to yes for this run.",
     )
     parser.add_argument(
         "--fit-halfseasonal",
         action="store_true",
+        default=None,
         help="Set halfseasonalsignal to yes for this run.",
     )
     return parser
@@ -434,15 +436,24 @@ def read_four_column_file(path: Path) -> tuple[list[float], list[float], list[fl
     return xs, y1, y2
 
 
+def compute_rms(values: list[float]) -> float:
+    if not values:
+        return float("nan")
+    return math.sqrt(sum(value * value for value in values) / len(values))
+
+
 def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
     years, data_values, model_values = read_mom_series(mom_path)
     residuals = [data - model for data, model in zip(data_values, model_values)]
+    rms_data = compute_rms(data_values)
+    rms_residuals = compute_rms(residuals)
 
     figure_dir.mkdir(parents=True, exist_ok=True)
 
     plt.figure(figsize=(10, 6))
-    plt.plot(years, data_values, ".", markersize=3, label="Data")
+    plt.plot(years, data_values, ".", markersize=3, label=f"Data RMS={rms_data:.3f} mm")
     plt.plot(years, model_values, "-", linewidth=1.5, label="Model")
+    plt.title(station)
     plt.xlabel("Years")
     plt.ylabel("mm")
     plt.legend()
@@ -451,9 +462,11 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
     plt.close()
 
     plt.figure(figsize=(10, 4))
-    plt.plot(years, residuals, "-", linewidth=1.0)
+    plt.plot(years, residuals, "-", linewidth=1.0, label=f"Residual RMS={rms_residuals:.3f} mm")
+    plt.title(station)
     plt.xlabel("Years")
     plt.ylabel("Residual (mm)")
+    plt.legend()
     plt.tight_layout()
     plt.savefig(figure_dir / f"{station}_res.png", dpi=150)
     plt.close()
@@ -614,8 +627,11 @@ def make_station_component_data_plot(
         metadata = result["metadata"]
         mom_path = Path(str(metadata["mom_path"]))
         years, data_values, model_values = read_mom_series(mom_path)
+        residuals = [data - model for data, model in zip(data_values, model_values)]
+        rms_data = compute_rms(data_values)
+        rms_residuals = compute_rms(residuals)
         component_label = str(metadata["component_label"])
-        axis.plot(years, data_values, ".", markersize=2, label=f"{component_label} data")
+        axis.plot(years, data_values, ".", markersize=2, label=f"{component_label} data RMS={rms_data:.3f} mm")
         axis.plot(
             years,
             model_values,
@@ -624,7 +640,7 @@ def make_station_component_data_plot(
             label=format_model_legend(result["estimatetrend"]),
         )
         axis.set_ylabel("mm")
-        axis.set_title(component_label)
+        axis.set_title(f"{component_label} residual RMS={rms_residuals:.3f} mm")
         axis.legend(loc="best", fontsize=9)
         annotation_lines = build_model_annotation_lines(result["estimatetrend"])
         if len(annotation_lines) > 1:
@@ -640,7 +656,8 @@ def make_station_component_data_plot(
             )
 
     axes[-1].set_xlabel("Years")
-    fig.tight_layout()
+    fig.suptitle(marker, fontsize=14)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
     fig.savefig(figure_dir / f"{marker}_components_data.png", dpi=150)
     plt.close(fig)
     plt.close()
@@ -1171,8 +1188,8 @@ def analyse_project(
     noise_model: str,
     station: str,
     freq: float,
-    fit_seasonal: bool,
-    fit_halfseasonal: bool,
+    fit_seasonal: bool | None,
+    fit_halfseasonal: bool | None,
 ) -> tuple[Path, int]:
     project_dir, config = load_project_config(project_name)
     if not noise_model:
@@ -1180,6 +1197,17 @@ def analyse_project(
         if not isinstance(noise_model_value, str) or not noise_model_value:
             raise ValueError("No noise model provided and analysis.noise_model is missing in config.")
         noise_model = noise_model_value
+    config_fit_seasonal = config["analysis"].get("estimate_seasonal_signals")
+    if not isinstance(config_fit_seasonal, bool):
+        raise ValueError("analysis.estimate_seasonal_signals is missing in config.")
+    if fit_seasonal is None:
+        fit_seasonal = config_fit_seasonal
+
+    config_fit_halfseasonal = config["analysis"].get("estimate_halfseasonal_signals")
+    if not isinstance(config_fit_halfseasonal, bool):
+        raise ValueError("analysis.estimate_halfseasonal_signals is missing in config.")
+    if fit_halfseasonal is None:
+        fit_halfseasonal = config_fit_halfseasonal
     raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
     mom_files = collect_station_files(raw_dir, station)
 

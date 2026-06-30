@@ -11,6 +11,8 @@ Edit it to match your machine before creating projects, especially:
 - `defaults.project_root`
 - `defaults.hector_home`
 - any common analysis defaults under `analysis`
+- `analysis.estimate_seasonal_signals`
+- `analysis.estimate_halfseasonal_signals`
 
 `initiate-project` reads this file and uses it as the base for each new `config/config.yaml`. Command-line options such as `--project-root` and `--hector-home` still override the machine config for one-off runs.
 
@@ -239,7 +241,9 @@ Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
 - `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates and only overrides run-specific fields such as input/output paths and selected noise model
-- for seasonal fitting flags, the command explicitly sets `seasonalsignal` and `halfseasonalsignal`; if the flags are absent they are forced to `no`
+- if `--fit-seasonal` is absent, `seasonalsignal` is taken from `analysis.estimate_seasonal_signals` in the project config
+- if `--fit-halfseasonal` is absent, `halfseasonalsignal` is taken from `analysis.estimate_halfseasonal_signals` in the project config
+- if either flag is provided, it forces the corresponding setting to `yes` for that run
 
 Outputs:
 
