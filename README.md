@@ -10,24 +10,27 @@ Repository for running time-series analysis workflows with HECTOR.
 
 ## Installation
 
-Create and activate a virtual environment:
+Create the Conda environment from the repository file:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+conda env create -f environment.yml
+conda activate ts-analysis-hector
 ```
 
-Install Python dependencies:
+If you later update `environment.yml`, refresh the environment with:
 
 ```bash
-pip install -r requirements.txt
+conda env update -f environment.yml --prune
 ```
 
-Current dependencies:
+Current core dependencies:
 
+- `python 3.12`
 - `numpy`
 - `scipy`
 - `matplotlib`
+
+`requirements.txt` is kept as a simple pip fallback, but the primary setup for this repository is Conda.
 
 ## Initialize a project
 

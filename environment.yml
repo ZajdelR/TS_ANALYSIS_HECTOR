@@ -1,0 +1,9 @@
+name: ts-analysis-hector
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - scipy
+  - matplotlib
+  - pip
