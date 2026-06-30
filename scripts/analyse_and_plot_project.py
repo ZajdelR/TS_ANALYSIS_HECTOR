@@ -419,14 +419,88 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
     plt.close()
 
 
-def format_model_legend(estimatetrend_json: dict[str, object]) -> str:
+def format_number(value: object) -> str:
+    if isinstance(value, (int, float)):
+        return f"{float(value):.3f}"
+    return str(value)
+
+
+def extract_signal_lines(estimatetrend_json: dict[str, object]) -> list[str]:
+    lines: list[str] = []
+
     trend = estimatetrend_json.get("trend")
     trend_sigma = estimatetrend_json.get("trend_sigma")
     if isinstance(trend, (int, float)) and isinstance(trend_sigma, (int, float)):
-        return f"Model trend={trend:.3f} +/- {trend_sigma:.3f}"
-    if isinstance(trend, (int, float)):
-        return f"Model trend={trend:.3f}"
-    return "Model"
+        lines.append(f"trend={trend:.3f} +/- {trend_sigma:.3f}")
+    elif isinstance(trend, (int, float)):
+        lines.append(f"trend={trend:.3f}")
+
+    preferred_pairs = [
+        ("bias", "bias_sigma"),
+        ("annual_amplitude", "annual_amplitude_sigma"),
+        ("semiannual_amplitude", "semiannual_amplitude_sigma"),
+        ("annual_phase", "annual_phase_sigma"),
+        ("semiannual_phase", "semiannual_phase_sigma"),
+        ("driving_noise", None),
+    ]
+    seen_keys = {"trend", "trend_sigma"}
+    for key, sigma_key in preferred_pairs:
+        value = estimatetrend_json.get(key)
+        if not isinstance(value, (int, float)):
+            continue
+        seen_keys.add(key)
+        if sigma_key and isinstance(estimatetrend_json.get(sigma_key), (int, float)):
+            sigma_value = float(estimatetrend_json[sigma_key])
+            lines.append(f"{key}={float(value):.3f} +/- {sigma_value:.3f}")
+            seen_keys.add(sigma_key)
+        else:
+            lines.append(f"{key}={float(value):.3f}")
+
+    signal_pattern = re.compile(r"(annual|semi|season|offset|postseismic|slow)", re.IGNORECASE)
+    for key, value in estimatetrend_json.items():
+        if key in seen_keys or key == "NoiseModel":
+            continue
+        if signal_pattern.search(key) and isinstance(value, (int, float)):
+            lines.append(f"{key}={float(value):.3f}")
+
+    return lines
+
+
+def extract_noise_lines(estimatetrend_json: dict[str, object]) -> list[str]:
+    lines: list[str] = []
+    noise_model_fit = estimatetrend_json.get("NoiseModel")
+    if not isinstance(noise_model_fit, dict):
+        return lines
+
+    for name, params in noise_model_fit.items():
+        if not isinstance(params, dict):
+            lines.append(f"{name}: {format_report_value(params)}")
+            continue
+        summary_parts: list[str] = []
+        if "fraction" in params:
+            summary_parts.append(f"fraction={format_number(params['fraction'])}")
+        for key in ("d", "phi", "1-phi", "lambda"):
+            if key in params:
+                summary_parts.append(f"{key}={format_number(params[key])}")
+        if "AR" in params and isinstance(params["AR"], list) and params["AR"]:
+            summary_parts.append(f"AR1={format_number(params['AR'][0])}")
+        lines.append(f"{name}: " + ", ".join(summary_parts) if summary_parts else f"{name}")
+    return lines
+
+
+def build_model_annotation_lines(estimatetrend_json: dict[str, object]) -> list[str]:
+    lines = extract_signal_lines(estimatetrend_json)
+    noise_lines = extract_noise_lines(estimatetrend_json)
+    if noise_lines:
+        lines.extend(noise_lines)
+    return lines
+
+
+def format_model_legend(estimatetrend_json: dict[str, object]) -> str:
+    lines = build_model_annotation_lines(estimatetrend_json)
+    if not lines:
+        return "Model"
+    return "Model " + lines[0]
 
 
 def make_station_component_data_plot(
@@ -459,6 +533,18 @@ def make_station_component_data_plot(
         axis.set_ylabel("mm")
         axis.set_title(component_label)
         axis.legend(loc="best", fontsize=9)
+        annotation_lines = build_model_annotation_lines(result["estimatetrend"])
+        if len(annotation_lines) > 1:
+            axis.text(
+                0.01,
+                0.98,
+                "\n".join(annotation_lines[1:6]),
+                transform=axis.transAxes,
+                va="top",
+                ha="left",
+                fontsize=8,
+                bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.7},
+            )
 
     axes[-1].set_xlabel("Years")
     fig.tight_layout()
@@ -568,6 +654,18 @@ def make_station_component_psd_plot(
         axis.set_ylabel("Power")
         axis.set_title(component_label)
         axis.legend(loc="best", fontsize=9)
+        annotation_lines = build_model_annotation_lines(result["estimatetrend"])
+        if len(annotation_lines) > 1:
+            axis.text(
+                0.01,
+                0.98,
+                "\n".join(annotation_lines[1:6]),
+                transform=axis.transAxes,
+                va="top",
+                ha="left",
+                fontsize=8,
+                bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.7},
+            )
 
     axes[-1].set_xlabel("Frequency (cpy)")
     fig.tight_layout()
@@ -791,10 +889,15 @@ def write_station_summary_report(
         if "NoiseModel" in est_json:
             lines.append("")
             lines.append("Noise model fit:")
-            noise_model_fit = est_json["NoiseModel"]
-            if isinstance(noise_model_fit, dict):
-                for name, params in noise_model_fit.items():
-                    lines.append(f"- `{name}`: `{format_report_value(params)}`")
+            for noise_line in extract_noise_lines(est_json):
+                lines.append(f"- `{noise_line}`")
+
+        signal_lines = extract_signal_lines(est_json)
+        if signal_lines:
+            lines.append("")
+            lines.append("Fitted signal terms:")
+            for signal_line in signal_lines:
+                lines.append(f"- `{signal_line}`")
 
         lines.append("")
 

@@ -243,5 +243,8 @@ Outputs:
 - analysed MOM files in `mom_files/`
 - aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
 - PNG time-series and PSD plots in `fil_files/data_figures/` and `fil_files/psd_figures/`
-- combined station plots across available `_0/_1/_2` components when they exist
+- combined station subplot figures across available `_0/_1/_2` components when they exist
+  : `components_data` is arranged as North, East, Up subplots and includes model annotations
+  : `components_psd` is also written as a grouped PSD figure for the available components
+  : fitted trend, uncertainty, fitted signals, and fitted noise parameters are shown when available
 - Markdown station summary reports in `fil_files/reports/`
