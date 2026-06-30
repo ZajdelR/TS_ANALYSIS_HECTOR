@@ -77,15 +77,17 @@ def parse_noisemodels(noisemodel_abr: str) -> list[str]:
 
 def collect_station_files(raw_dir: Path, station: str) -> list[Path]:
     if station:
+        marker = get_station_marker(station)
+        grouped_matches = sorted(
+            path
+            for path in raw_dir.glob(f"{marker}_*.mom")
+            if path.is_file() and re.search(r"_\d+$", path.stem)
+        )
+        if grouped_matches:
+            return grouped_matches
+
         candidate = raw_dir / f"{station}.mom"
         if not candidate.exists():
-            component_matches = sorted(
-                path
-                for path in raw_dir.glob(f"{station}_*.mom")
-                if path.is_file() and re.search(r"_\d+$", path.stem)
-            )
-            if component_matches:
-                return component_matches
             raise FileNotFoundError(f"MOM file does not exist: {candidate}")
         return [candidate]
 

@@ -214,10 +214,11 @@ files in `raw_files/`:
 analyse-and-plot my_project
 ```
 
-To analyse only one station/component file:
+To analyse one station and automatically include its available `_0`, `_1`, `_2`
+components:
 
 ```bash
-analyse-and-plot my_project --station station_0
+analyse-and-plot my_project --station station
 ```
 
 Equivalent direct Python entrypoint:
@@ -229,7 +230,7 @@ python3 scripts/analyse_and_plot_project.py my_project
 Optional arguments:
 
 - `--noise-model PLWN` to override `analysis.noise_model` from the project config.
-- `--station station_0` to process one `.mom` stem from `raw_files/`.
+- `--station station` to process one station marker and include all matching component files.
 - `--freq 0.0172` to add an extra periodic signal frequency.
 
 Runtime note:
