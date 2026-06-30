@@ -1,0 +1,26 @@
+project_name: "demo_project"
+analysis:
+  reference_frame: "IGS14"
+  sampling_period_days: 1.0
+  noise_model: "plwn"
+  estimate_offsets: true
+  estimate_seasonal_signals: true
+  use_outlier_detection: true
+paths:
+  project_root: "/home/radek/PYTHON_PROJECTS/TS_ANALYSIS_HECTOR/projects/demo_project"
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+  metadata_dir: "metadata"
+  outputs_dir: "outputs"
+  logs_dir: "logs"
+  hector_home: "/home/radek/app/hector"
+  hector_estimatetrend: "/home/radek/app/hector/estimatetrend"
+  hector_removeoutliers: "/home/radek/app/hector/removeoutliers"
+  hector_estimatespectrum: "/home/radek/app/hector/estimatespectrum"
+files:
+  station_timeseries: ""
+  offsets_catalog: ""
+  postseismic_catalog: ""
+notes:
+  description: ""
+  created_by: "init_project.py"
