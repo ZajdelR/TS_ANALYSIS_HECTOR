@@ -78,6 +78,7 @@ Default HECTOR path written to the config:
 Each initialized project currently contains:
 
 - `config/config.yaml`
+- `config/hector/` with copied example HECTOR `.ctl` files
 - `ori_files/`
 - `raw_files/`
 - `obs_files/`

@@ -15,6 +15,7 @@ except ModuleNotFoundError:
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = ROOT_DIR / "projects"
+EXAMPLE_HECTOR_CONFIG_DIR = ROOT_DIR / "example_hector_config"
 
 DEFAULT_SUBDIRECTORIES = (
     "config",
@@ -105,6 +106,18 @@ def confirm_reinitialize(project_dir: Path) -> bool:
     return answer in {"y", "yes"}
 
 
+def copy_example_hector_config(project_dir: Path) -> None:
+    destination_dir = project_dir / "config" / "hector"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    for source_path in sorted(EXAMPLE_HECTOR_CONFIG_DIR.iterdir()):
+        if not source_path.is_file():
+            continue
+        if source_path.name.endswith(":Zone.Identifier"):
+            continue
+        shutil.copy2(source_path, destination_dir / source_path.name)
+
+
 def initialize_project(
     project_name: str,
     project_root: str,
@@ -131,6 +144,7 @@ def initialize_project(
         render_yaml(project_name, project_dir, Path(hector_home).expanduser()),
         encoding="utf-8",
     )
+    copy_example_hector_config(project_dir)
     register_project(
         project_name=project_name,
         project_dir=project_dir,
