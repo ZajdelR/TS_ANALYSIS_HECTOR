@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -455,6 +456,59 @@ def extract_signal_lines(estimatetrend_json: dict[str, object]) -> list[str]:
             seen_keys.add(sigma_key)
         else:
             lines.append(f"{key}={float(value):.3f}")
+
+    harmonic_definitions = [
+        ("annual", "365.250"),
+        ("halfseasonal", "182.625"),
+    ]
+    for label, period in harmonic_definitions:
+        amp_key = f"amp_{period}"
+        pha_key = f"pha_{period}"
+        amp_sigma_key = f"{amp_key}_sigma"
+        pha_sigma_key = f"{pha_key}_sigma"
+        amp_value = estimatetrend_json.get(amp_key)
+        pha_value = estimatetrend_json.get(pha_key)
+        if isinstance(amp_value, (int, float)):
+            if isinstance(estimatetrend_json.get(amp_sigma_key), (int, float)):
+                lines.append(
+                    f"{label}_amp={float(amp_value):.3f} +/- "
+                    f"{float(estimatetrend_json[amp_sigma_key]):.3f}"
+                )
+            else:
+                lines.append(f"{label}_amp={float(amp_value):.3f}")
+        if isinstance(pha_value, (int, float)):
+            if isinstance(estimatetrend_json.get(pha_sigma_key), (int, float)):
+                lines.append(
+                    f"{label}_phase={float(pha_value):.3f} +/- "
+                    f"{float(estimatetrend_json[pha_sigma_key]):.3f}"
+                )
+            else:
+                lines.append(f"{label}_phase={float(pha_value):.3f}")
+        if isinstance(amp_value, (int, float)) or isinstance(pha_value, (int, float)):
+            continue
+
+        cos_key = f"cos_{period}"
+        sin_key = f"sin_{period}"
+        cos_sigma_key = f"{cos_key}_sigma"
+        sin_sigma_key = f"{sin_key}_sigma"
+        cos_value = estimatetrend_json.get(cos_key)
+        sin_value = estimatetrend_json.get(sin_key)
+        if not isinstance(cos_value, (int, float)) or not isinstance(sin_value, (int, float)):
+            continue
+
+        amplitude = math.sqrt(float(cos_value) ** 2 + float(sin_value) ** 2)
+        phase_deg = math.degrees(math.atan2(float(sin_value), float(cos_value)))
+        lines.append(f"{label}_amp={amplitude:.3f}")
+        lines.append(f"{label}_phase_deg={phase_deg:.3f}")
+        lines.append(f"{label}_cos={float(cos_value):.3f}")
+        lines.append(f"{label}_sin={float(sin_value):.3f}")
+
+        cos_sigma = estimatetrend_json.get(cos_sigma_key)
+        sin_sigma = estimatetrend_json.get(sin_sigma_key)
+        if isinstance(cos_sigma, (int, float)):
+            lines.append(f"{label}_cos_sigma={float(cos_sigma):.3f}")
+        if isinstance(sin_sigma, (int, float)):
+            lines.append(f"{label}_sin_sigma={float(sin_sigma):.3f}")
 
     signal_pattern = re.compile(r"(annual|semi|season|offset|postseismic|slow)", re.IGNORECASE)
     for key, value in estimatetrend_json.items():
