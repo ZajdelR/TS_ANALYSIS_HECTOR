@@ -79,12 +79,13 @@ Default HECTOR path written to the config:
 Each initialized project currently contains:
 
 - `config/config.yaml`
-- `data/raw/`
-- `data/processed/`
-- `metadata/`
-- `outputs/figures/`
-- `outputs/hector/`
-- `logs/`
+- `ori_files/`
+- `raw_files/`
+- `obs_files/`
+- `pre_files/`
+- `mom_files/`
+- `sea_files/`
+- `fil_files/`
 
 The generated `config.yaml` stores general analysis options and paths to HECTOR executables and input files.
 

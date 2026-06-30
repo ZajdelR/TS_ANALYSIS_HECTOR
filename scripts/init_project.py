@@ -17,12 +17,13 @@ PROJECTS_DIR = ROOT_DIR / "projects"
 
 DEFAULT_SUBDIRECTORIES = (
     "config",
-    "data/raw",
-    "data/processed",
-    "metadata",
-    "outputs/figures",
-    "outputs/hector",
-    "logs",
+    "ori_files",
+    "raw_files",
+    "obs_files",
+    "pre_files",
+    "mom_files",
+    "sea_files",
+    "fil_files",
 )
 
 
@@ -76,11 +77,13 @@ def render_yaml(project_name: str, project_dir: Path, hector_home: Path) -> str:
             "  use_outlier_detection: true",
             "paths:",
             f'  project_root: "{project_dir}"',
-            '  raw_data_dir: "data/raw"',
-            '  processed_data_dir: "data/processed"',
-            '  metadata_dir: "metadata"',
-            '  outputs_dir: "outputs"',
-            '  logs_dir: "logs"',
+            '  ori_files_dir: "ori_files"',
+            '  raw_files_dir: "raw_files"',
+            '  obs_files_dir: "obs_files"',
+            '  pre_files_dir: "pre_files"',
+            '  mom_files_dir: "mom_files"',
+            '  sea_files_dir: "sea_files"',
+            '  fil_files_dir: "fil_files"',
             f'  hector_home: "{hector_home}"',
             f'  hector_estimatetrend: "{hector_home / "estimatetrend"}"',
             f'  hector_removeoutliers: "{hector_home / "removeoutliers"}"',
