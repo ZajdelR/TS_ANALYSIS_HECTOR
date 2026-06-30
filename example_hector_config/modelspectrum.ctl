@@ -1,5 +1,3 @@
-DataFile                AREG_GAL.mom
-DataDirectory           ./mom_files
 ScaleFactor             1.0
 PhysicalUnit            mm
 NoiseModels             GGM

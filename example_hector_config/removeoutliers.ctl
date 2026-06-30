@@ -1,7 +1,4 @@
-DataFile            AREG_GAL.mom
-DataDirectory         ./obs_files
 interpolate           no
-OutputFile            ./pre_files/AREG_GAL.mom
 seasonalsignal        yes
 halfseasonalsignal    yes
 estimateoffsets       yes

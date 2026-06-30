@@ -1,6 +1,3 @@
-DataFile            dummy0_2.mom
-OutputFile          ./output/ALIC_GPSQ_output.mom
-DataDirectory       ./
 interpolate         no
 PhysicalUnit        m
 ScaleFactor         1.0
