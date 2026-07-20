@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -30,8 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("project_name", help="Registered project name.")
     parser.add_argument(
         "--noise-model",
-        default="",
-        help="Optional override for the noise model abbreviation string from config.",
+        required=True,
+        help="Noise model abbreviation string for this analysis run, for example PLWN.",
     )
     parser.add_argument(
         "--station",
@@ -55,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=None,
         help="Set halfseasonalsignal to yes for this run.",
+    )
+    parser.add_argument(
+        "--keep-temp-config",
+        action="store_true",
+        help="Keep the generated hector_run_* directory with temporary .ctl files and Hector scratch outputs.",
     )
     return parser
 
@@ -952,6 +958,7 @@ def analyse_station(
     freq: float,
     fit_seasonal: bool,
     fit_halfseasonal: bool,
+    keep_temp_config: bool,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     paths = config["paths"]
     hector_removeoutliers = Path(str(paths["hector_removeoutliers"]))
@@ -982,8 +989,19 @@ def analyse_station(
     pre_dir.mkdir(parents=True, exist_ok=True)
     mom_dir.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(dir=project_dir, prefix="hector_run_") as temp_dir_name:
+    kept_temp_dir: Path | None = None
+    if keep_temp_config:
+        temp_context = contextlib.nullcontext(
+            tempfile.mkdtemp(dir=project_dir, prefix="hector_run_")
+        )
+    else:
+        temp_context = tempfile.TemporaryDirectory(dir=project_dir, prefix="hector_run_")
+
+    with temp_context as temp_dir_name:
         temp_dir = Path(temp_dir_name)
+        if keep_temp_config:
+            kept_temp_dir = temp_dir
+            print(f"Keeping temporary run directory for {station}: {temp_dir}")
 
         removeoutliers_ctl = temp_dir / "removeoutliers.ctl"
         create_removeoutliers_ctl_file(
@@ -1095,6 +1113,8 @@ def analyse_station(
         "lomb_residuals_plot": str(psd_figure_dir / f"{station}_lomb_residuals_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
     }
+    if kept_temp_dir is not None:
+        metadata["temp_config_dir"] = str(kept_temp_dir)
     signal_periods, signal_amplitudes = compute_signal_periodogram(mom_dir / f"{station}.mom")
     make_lomb_scargle_period_plot(
         psd_figure_dir / f"{station}_lomb_signal_days.png",
@@ -1152,6 +1172,8 @@ def write_station_summary_report(
                 f"- PSD plot: `{metadata['psd_plot']}`",
             ]
         )
+        if "temp_config_dir" in metadata:
+            lines.append(f"- Temporary run directory: `{metadata['temp_config_dir']}`")
 
         trend_keys = ("trend", "trend_sigma", "bias", "driving_noise")
         available_est_keys = [key for key in trend_keys if key in est_json]
@@ -1194,19 +1216,16 @@ def analyse_project(
     freq: float,
     fit_seasonal: bool | None,
     fit_halfseasonal: bool | None,
-) -> tuple[Path, int]:
+    keep_temp_config: bool,
+) -> tuple[Path, int, list[Path]]:
     project_dir, config = load_project_config(project_name)
-    if not noise_model:
-        noise_model_value = config["analysis"].get("noise_model")
-        if not isinstance(noise_model_value, str) or not noise_model_value:
-            raise ValueError("No noise model provided and analysis.noise_model is missing in config.")
-        noise_model = noise_model_value
     raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
     mom_files = collect_station_files(raw_dir, station)
 
     estimatetrend_results: dict[str, object] = {}
     removeoutliers_results: dict[str, object] = {}
     grouped_results: dict[str, list[dict[str, object]]] = {}
+    kept_temp_dirs: list[Path] = []
     for mom_file in mom_files:
         station_name = mom_file.stem
         est_json, rem_json, metadata = analyse_station(
@@ -1217,7 +1236,10 @@ def analyse_project(
             freq,
             fit_seasonal,
             fit_halfseasonal,
+            keep_temp_config,
         )
+        if "temp_config_dir" in metadata:
+            kept_temp_dirs.append(Path(str(metadata["temp_config_dir"])))
         estimatetrend_results[station_name] = est_json
         removeoutliers_results[station_name] = rem_json
         marker = str(metadata["marker"])
@@ -1254,7 +1276,7 @@ def analyse_project(
                 make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
         write_station_summary_report(marker, report_dir, noise_model, freq, sorted_results)
 
-    return mom_dir, len(mom_files)
+    return mom_dir, len(mom_files), kept_temp_dirs
 
 
 def main() -> int:
@@ -1262,18 +1284,23 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        output_dir, station_count = analyse_project(
+        output_dir, station_count, kept_temp_dirs = analyse_project(
             project_name=args.project_name,
             noise_model=args.noise_model,
             station=args.station,
             freq=args.freq,
             fit_seasonal=args.fit_seasonal,
             fit_halfseasonal=args.fit_halfseasonal,
+            keep_temp_config=args.keep_temp_config,
         )
     except (FileNotFoundError, ValueError, KeyError, RuntimeError) as exc:
         parser.error(str(exc))
 
     print(f"Analysed {station_count} station file(s); results written under {output_dir}")
+    if kept_temp_dirs:
+        print("Kept temporary run directories:")
+        for temp_dir in kept_temp_dirs:
+            print(f"  {temp_dir}")
     return 0
 
 

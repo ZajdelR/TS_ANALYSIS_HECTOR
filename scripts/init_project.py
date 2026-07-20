@@ -67,21 +67,12 @@ def validate_project_name(project_name: str) -> str:
 
 
 def render_yaml(project_name: str, hector_home: Path) -> str:
-    analysis = MACHINE_CONFIG["analysis"]
     paths = MACHINE_CONFIG["paths"]
     files = MACHINE_CONFIG["files"]
     notes = MACHINE_CONFIG["notes"]
     return "\n".join(
         (
             f'project_name: "{project_name}"',
-            "analysis:",
-            f'  reference_frame: "{analysis["reference_frame"]}"',
-            f'  sampling_period_days: {analysis["sampling_period_days"]}',
-            f'  noise_model: "{analysis["noise_model"]}"',
-            f'  estimate_offsets: {str(analysis["estimate_offsets"]).lower()}',
-            f'  estimate_seasonal_signals: {str(analysis["estimate_seasonal_signals"]).lower()}',
-            f'  estimate_halfseasonal_signals: {str(analysis["estimate_halfseasonal_signals"]).lower()}',
-            f'  use_outlier_detection: {str(analysis["use_outlier_detection"]).lower()}',
             "paths:",
             f'  project_root: "{paths["project_root"]}"',
             f'  ori_files_dir: "{paths["ori_files_dir"]}"',

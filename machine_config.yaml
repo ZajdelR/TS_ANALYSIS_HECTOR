@@ -1,14 +1,6 @@
 defaults:
   project_root: "/data/GNSS/hector-projects/"
   hector_home: "/home/gnss/HECTOR_TEMP/"
-analysis:
-  reference_frame: "IGS20"
-  sampling_period_days: 1.0
-  noise_model: "PLWN"
-  estimate_offsets: true
-  estimate_seasonal_signals: true
-  estimate_halfseasonal_signals: true
-  use_outlier_detection: true
 paths:
   project_root: "."
   ori_files_dir: "ori_files"

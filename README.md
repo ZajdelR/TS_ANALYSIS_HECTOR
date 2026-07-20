@@ -10,11 +10,10 @@ Edit it to match your machine before creating projects, especially:
 
 - `defaults.project_root`
 - `defaults.hector_home`
-- any common analysis defaults under `analysis`
-- `analysis.estimate_seasonal_signals`
-- `analysis.estimate_halfseasonal_signals`
 
-`initiate-project` reads this file and uses it as the base for each new `config/config.yaml`. Command-line options such as `--project-root` and `--hector-home` still override the machine config for one-off runs.
+Analysis choices are intentionally not stored in `machine_config.yaml`. Pass them to `analyse-and-plot` for each run, for example with `--noise-model`, `--freq`, `--fit-seasonal`, and `--fit-halfseasonal`.
+
+`initiate-project` reads this file and uses it as the base for machine-specific paths in each new `config/config.yaml`. Command-line options such as `--project-root` and `--hector-home` still override the machine config for one-off runs.
 
 ## Repository layout
 
@@ -113,7 +112,13 @@ Each initialized project currently contains:
 - `sea_files/`
 - `fil_files/`
 
-The generated `config.yaml` stores general analysis options and paths to HECTOR executables and input files.
+The generated `config.yaml` stores project paths, HECTOR executable paths, and input-file placeholders. Analysis choices are supplied per `analyse-and-plot` run.
+
+The `.ctl` files in `example_hector_config/` are repository defaults. During
+project initialization they are copied into the project-local
+`config/hector/` directory. Analysis runs use those project-local files as
+templates, so you can edit them per project without changing the repository
+defaults.
 
 Each initialized project is also registered in `project_registry.json`, so future scripts can resolve a project name to its actual location even when projects are stored outside this repository.
 
@@ -213,34 +218,38 @@ Run a project-aware adaptation of Hector's `analyse_and_plot.py` on the MOM
 files in `raw_files/`:
 
 ```bash
-analyse-and-plot my_project
+analyse-and-plot my_project --noise-model PLWN
 ```
 
 To analyse one station and automatically include its available `_0`, `_1`, `_2`
 components:
 
 ```bash
-analyse-and-plot my_project --station station
+analyse-and-plot my_project --station station --noise-model PLWN
 ```
 
 Equivalent direct Python entrypoint:
 
 ```bash
-python3 scripts/analyse_and_plot_project.py my_project
+python3 scripts/analyse_and_plot_project.py my_project --noise-model PLWN
 ```
 
-Optional arguments:
+Analysis arguments:
 
-- `--noise-model PLWN` to override `analysis.noise_model` from the project config.
+- `--noise-model PLWN` to choose the noise model for this analysis run. This is required.
 - `--station station` to process one station marker and include all matching component files.
 - `--freq 0.0172` to add an extra periodic signal frequency.
 - `--fit-seasonal` to force `seasonalsignal yes` for this run.
 - `--fit-halfseasonal` to force `halfseasonalsignal yes` for this run.
+- `--keep-temp-config` to keep the generated `hector_run_*` directory for inspection after the run.
 
 Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
-- `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates and only overrides run-specific fields such as input/output paths and selected noise model
+- `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates
+- for each run, temporary `.ctl` files are written under a `hector_run_*` directory with run-specific fields such as input/output paths, JSON output, selected noise model, and requested periodic signals
+- by default, the `hector_run_*` directory is deleted when each station/component finishes; use `--keep-temp-config` to preserve it
+- the project-local files in `config/hector/` are not modified by `analyse-and-plot`
 - if `--fit-seasonal` is absent, the existing `seasonalsignal` value from the project `.ctl` template is preserved
 - if `--fit-halfseasonal` is absent, the existing `halfseasonalsignal` value from the project `.ctl` template is preserved
 - if either flag is provided, it forces the corresponding setting to `yes` for that run

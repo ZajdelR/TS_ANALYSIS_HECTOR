@@ -4,6 +4,6 @@ ScaleFactor           1.0
 JSON                  yes
 NoiseModels           Powerlaw White
 LikelihoodMethod      AmmarGrag
-seasonalsignal        yes
-halfseasonalsignal    yes
+seasonalsignal        no
+halfseasonalsignal    no
 estimateoffsets       yes

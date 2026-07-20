@@ -18,7 +18,6 @@ Machine-level setup
      Important keys:
        - defaults.project_root
        - defaults.hector_home
-       - analysis.noise_model
   2. Create and activate the environment
        conda env create -f environment.yml
        conda activate ts-analysis-hector
@@ -40,7 +39,7 @@ Main workflow
        convert-neu-to-mom my_project
 
   5. Analyse and plot
-       analyse-and-plot my_project
+       analyse-and-plot my_project --noise-model PLWN
 
 Project structure
   config/
@@ -73,6 +72,17 @@ Installed commands
   repo-help
     Show this repository-level workflow help.
 
+HECTOR control files
+  - example_hector_config/ contains repository default .ctl files.
+  - initiate-project copies those .ctl files into config/hector/ inside the
+    project.
+  - analyse-and-plot reads the project-local config/hector/ files as templates.
+  - For each run it writes temporary .ctl files in a short-lived hector_run_*
+    directory and applies run-specific values there.
+  - Use analyse-and-plot --keep-temp-config to preserve the hector_run_*
+    directory for inspection after the run.
+  - analyse-and-plot does not modify the project-local config/hector/ files.
+
 Common outputs
   pre_files/
     Outlier-cleaned MOM files
@@ -92,8 +102,8 @@ Common outputs
     Station summary reports
 
 Notes
-  - analyse-and-plot uses analysis.noise_model from config by default.
-  - --noise-model can override the config for one run.
+  - Analysis choices are passed to analyse-and-plot for each run.
+  - --noise-model is required, for example --noise-model PLWN.
   - project_registry.json maps project names to absolute project paths.
 """
 
