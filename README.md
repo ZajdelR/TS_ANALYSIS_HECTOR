@@ -245,6 +245,9 @@ Analysis arguments:
 - `--no-fit-halfseasonal` to force `halfseasonalsignal no` for this run.
 - `--keep-temp-config` to keep the generated `hector_run_temp/STATION_DATE_TIME` directory for inspection after the run.
 - `--make-psd-plots` to run the slower Hector spectrum/model-spectrum steps and write PSD plots. PSD plots are skipped by default.
+- `--find-offsets` to run Hector `findoffset` before analysis, write offset-annotated MOM files to `obs_files/`, use those files for the analysis, and mark detected offsets in final plots.
+- `--max-offsets 8` to control how many offsets are tested when `--find-offsets` is enabled.
+- `--offset-penalty 8.0` to override `BIC_c_ExtraPenalty` from the project-local `findoffset.ctl` for one run.
 - `--log-level INFO` to control CLI logging verbosity. Use `INFO` for timing messages, `DEBUG` for command/temp-directory details, or `WARNING` for quieter output.
 
 Runtime note:
@@ -258,10 +261,12 @@ Runtime note:
 - if `--fit-halfseasonal` is absent, the existing `halfseasonalsignal` value from the project `.ctl` template is preserved
 - if a positive or negative seasonal flag is provided, it forces the corresponding setting for that run
 - PSD plots are skipped by default; use `--make-psd-plots` when you need Hector spectrum/model-spectrum output
+- offset finding is skipped by default; use `--find-offsets` to detect offsets and feed offset-annotated `obs_files/*.mom` files into the rest of the analysis
 - default `INFO` logs show `START`/`DONE` messages with elapsed seconds for Hector commands, plots, reports, and each station/component workflow
 
 Outputs:
 
+- offset-annotated MOM files in `obs_files/` when `--find-offsets` is used
 - cleaned files in `pre_files/`
 - analysed MOM files in `mom_files/`
 - aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`

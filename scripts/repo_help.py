@@ -110,6 +110,9 @@ Notes
     for one run.
   - PSD plots are skipped by default because the spectrum/model-spectrum steps
     can be slow. Use --make-psd-plots when you need them.
+  - Offset finding is skipped by default. Use --find-offsets to run Hector
+    findoffset, write offset-annotated MOM files to obs_files/, and mark
+    detected offsets in plots.
   - Default INFO logs show START/DONE timing messages for Hector commands,
     plots, reports, and station/component workflows. Use --log-level WARNING
     for quieter output or --log-level DEBUG for more detail.

@@ -86,6 +86,7 @@ def render_yaml(project_name: str, hector_home: Path) -> str:
             f'  hector_estimatetrend: "{hector_home / "estimatetrend"}"',
             f'  hector_removeoutliers: "{hector_home / "removeoutliers"}"',
             f'  hector_estimatespectrum: "{hector_home / "estimatespectrum"}"',
+            f'  hector_findoffset: "{hector_home / "findoffset"}"',
             "files:",
             f'  station_timeseries: "{files["station_timeseries"]}"',
             f'  offsets_catalog: "{files["offsets_catalog"]}"',

@@ -102,6 +102,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run Hector spectrum/model-spectrum steps and write PSD plots. Disabled by default because it can be slow.",
     )
     parser.add_argument(
+        "--find-offsets",
+        action="store_true",
+        help="Run Hector findoffset before analysis, write offset-annotated MOM files to obs_files, and mark detected offsets in plots.",
+    )
+    parser.add_argument(
+        "--max-offsets",
+        type=int,
+        default=8,
+        help="Maximum number of offsets to test when --find-offsets is enabled.",
+    )
+    parser.add_argument(
+        "--offset-penalty",
+        type=float,
+        default=None,
+        help="Optional BIC_c extra penalty override for --find-offsets. If omitted, the findoffset.ctl template value is used.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -161,6 +178,38 @@ def parse_noisemodels(noisemodel_abr: str) -> list[str]:
     if "GGM" in noisemodels and any(token in noisemodels for token in ("PL", "FN", "RW")):
         raise ValueError("Cannot have GGM and one of PL|FN|RW together")
     return noisemodels
+
+
+def noisemodels_to_hector_names(noisemodels: list[str]) -> tuple[str, bool, bool]:
+    names = ""
+    need_1mphi = False
+    need_varying_phi = False
+    for noisemodel in noisemodels:
+        if noisemodel == "WN":
+            names += " White"
+        elif noisemodel in {"GGM", "fGGM"}:
+            names += " GGM"
+        elif noisemodel == "FN":
+            names += " FlickerGGM"
+            need_1mphi = True
+        elif noisemodel == "RW":
+            names += " RandomWalkGGM"
+            need_1mphi = True
+        elif noisemodel == "PL":
+            names += " GGM"
+            need_1mphi = True
+        elif noisemodel == "MT":
+            names += " Matern"
+        elif noisemodel == "VA":
+            names += " VaryingAnnual"
+            need_varying_phi = True
+        elif noisemodel == "VSA":
+            names += " VaryingSemiAnnual"
+            need_varying_phi = True
+        elif noisemodel == "AR1":
+            names += " ARMA"
+
+    return names.lstrip(), need_1mphi, need_varying_phi
 
 
 def collect_station_files(raw_dir: Path, station: str) -> list[Path]:
@@ -282,35 +331,11 @@ def create_estimatetrend_ctl_file(
     need_1mphi = False
     need_varying_phi = False
     if noisemodels is not None:
-        names = ""
-        for noisemodel in noisemodels:
-            if noisemodel == "WN":
-                names += " White"
-            elif noisemodel in {"GGM", "fGGM"}:
-                names += " GGM"
-            elif noisemodel == "FN":
-                names += " FlickerGGM"
-                need_1mphi = True
-            elif noisemodel == "RW":
-                names += " RandomWalkGGM"
-                need_1mphi = True
-            elif noisemodel == "PL":
-                names += " GGM"
-                need_1mphi = True
-            elif noisemodel == "MT":
-                names += " Matern"
-            elif noisemodel == "VA":
-                names += " VaryingAnnual"
-                need_varying_phi = True
-            elif noisemodel == "VSA":
-                names += " VaryingSemiAnnual"
-                need_varying_phi = True
-            elif noisemodel == "AR1":
-                names += " ARMA"
-                settings["AR_p"] = "1"
-                settings["MA_q"] = "0"
-
-        settings["NoiseModels"] = names.lstrip()
+        names, need_1mphi, need_varying_phi = noisemodels_to_hector_names(noisemodels)
+        settings["NoiseModels"] = names
+        if "AR1" in noisemodels:
+            settings["AR_p"] = "1"
+            settings["MA_q"] = "0"
     if fit_seasonal is not None:
         settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
     if fit_halfseasonal is not None:
@@ -339,6 +364,45 @@ def create_estimatespectrum_ctl_file(
     settings["DataDirectory"] = str(mom_dir)
     if noise_model:
         settings["NoiseModels"] = noise_model
+    write_ctl_file(ctl_path, settings)
+
+
+def create_findoffset_ctl_file(
+    ctl_path: Path,
+    template_path: Path,
+    data_file: str,
+    data_dir: Path,
+    output_file: Path,
+    noisemodels: list[str] | None,
+    offset_penalty: float | None,
+    fit_seasonal: bool | None,
+    fit_halfseasonal: bool | None,
+) -> None:
+    settings = load_ctl_template(template_path)
+    settings["DataFile"] = data_file
+    settings["DataDirectory"] = str(data_dir)
+    settings["OutputFile"] = str(output_file)
+    settings["JSON"] = "yes"
+    settings["estimateoffsets"] = "yes"
+
+    if noisemodels is not None:
+        names, need_1mphi, need_varying_phi = noisemodels_to_hector_names(noisemodels)
+        settings["NoiseModels"] = names
+        if need_1mphi and "GGM_1mphi" not in settings:
+            settings["GGM_1mphi"] = "6.9e-06"
+        if need_varying_phi and "phi_varying_fixed" not in settings:
+            settings["phi_varying_fixed"] = "0.9999"
+        if "fGGM" in noisemodels:
+            settings["GGM_1mphi"] = settings.get("GGM_1mphi", "0.02")
+            settings["kappa_fixed"] = settings.get("kappa_fixed", "-1.0")
+
+    if offset_penalty is not None:
+        settings["BIC_c_ExtraPenalty"] = f"{offset_penalty:f}"
+    if fit_seasonal is not None:
+        settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
+    if fit_halfseasonal is not None:
+        settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
+
     write_ctl_file(ctl_path, settings)
 
 
@@ -445,6 +509,148 @@ def read_sampling_info(mom_path: Path) -> tuple[float, float, float, int]:
     return sampling_period, mjd0, mjd1, number_of_points
 
 
+def mjd_to_year(mjd: float) -> float:
+    return (mjd - 51544.0) / 365.25 + 2000.0
+
+
+def extract_findoffset_results(output_path: Path) -> tuple[float | None, float | None]:
+    candidate_mjd: float | None = None
+    bic_c: float | None = None
+    for line in output_path.read_text(encoding="utf-8").splitlines():
+        bic_match = re.match(r"^BIC_c\s+=\s*(-?\d+\.?\d*)", line)
+        if bic_match:
+            bic_c = float(bic_match.group(1))
+        mjd_match = re.match(r"^FindOffset MJD\s+=\s*(\d+\.?\d*)", line)
+        if mjd_match:
+            candidate_mjd = float(mjd_match.group(1))
+    return candidate_mjd, bic_c
+
+
+def read_findoffset_curve_minimum(curve_path: Path) -> float | None:
+    minimum_mjd: float | None = None
+    minimum_value: float | None = None
+    with curve_path.open(encoding="utf-8") as fp:
+        for line in fp:
+            if not line.strip() or line.startswith("#"):
+                continue
+            columns = line.split()
+            if len(columns) < 2:
+                continue
+            mjd = float(columns[0])
+            value = float(columns[1])
+            if minimum_value is None or value < minimum_value:
+                minimum_mjd = mjd
+                minimum_value = value
+    return minimum_mjd
+
+
+def write_mom_with_offset_headers(source_path: Path, destination_path: Path, offsets: list[float]) -> None:
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    header_open = True
+    with source_path.open(encoding="utf-8") as source, destination_path.open("w", encoding="utf-8") as destination:
+        for line in source:
+            if header_open and line.startswith("#"):
+                destination.write(line)
+                continue
+            if header_open:
+                for offset in offsets:
+                    destination.write(f"# offset {offset:.1f}\n")
+                header_open = False
+            destination.write(line)
+
+
+def run_find_offsets(
+    station: str,
+    raw_mom_path: Path,
+    obs_dir: Path,
+    temp_dir: Path,
+    hector_findoffset: Path,
+    findoffset_template: Path,
+    noisemodels: list[str] | None,
+    offset_penalty: float | None,
+    fit_seasonal: bool | None,
+    fit_halfseasonal: bool | None,
+    max_offsets: int,
+) -> tuple[Path, list[float]]:
+    if max_offsets < 1:
+        raise ValueError("--max-offsets must be at least 1 when --find-offsets is enabled.")
+
+    working_source = temp_dir / f"{station}_offset_round_0.mom"
+    shutil.copy2(raw_mom_path, working_source)
+    offsets: list[float] = []
+    bic_values: list[float] = []
+    candidate_offsets: list[float] = []
+
+    for round_index in range(max_offsets + 1):
+        ctl_path = temp_dir / "findoffset.ctl"
+        stdout_path = temp_dir / f"findoffset_round_{round_index}.txt"
+        curve_path = temp_dir / f"findoffset_round_{round_index}.out"
+        output_mom_path = temp_dir / f"findoffset_output_round_{round_index}.mom"
+        data_file = working_source.name
+
+        with timed_step(f"{station}: prepare findoffset round {round_index} ctl"):
+            create_findoffset_ctl_file(
+                ctl_path=ctl_path,
+                template_path=findoffset_template,
+                data_file=data_file,
+                data_dir=temp_dir,
+                output_file=output_mom_path,
+                noisemodels=noisemodels,
+                offset_penalty=offset_penalty,
+                fit_seasonal=fit_seasonal,
+                fit_halfseasonal=fit_halfseasonal,
+            )
+
+        with timed_step(f"{station}: Hector findoffset round {round_index}"):
+            run_command(
+                [str(hector_findoffset)],
+                cwd=temp_dir,
+                stdout_path=stdout_path,
+            )
+
+        candidate_mjd, bic_c = extract_findoffset_results(stdout_path)
+        if bic_c is None:
+            raise RuntimeError(f"Could not parse BIC_c from {stdout_path}")
+        bic_values.append(bic_c)
+
+        raw_curve_path = temp_dir / "findoffset.out"
+        if raw_curve_path.exists():
+            shutil.move(str(raw_curve_path), curve_path)
+            curve_candidate_mjd = read_findoffset_curve_minimum(curve_path)
+            if curve_candidate_mjd is not None:
+                candidate_mjd = curve_candidate_mjd
+
+        LOGGER.info(
+            "%s: findoffset round %d BIC_c=%.3f candidate_mjd=%s",
+            station,
+            round_index,
+            bic_c,
+            f"{candidate_mjd:.1f}" if candidate_mjd is not None else "none",
+        )
+
+        if round_index > 0 and bic_values[round_index] >= bic_values[round_index - 1]:
+            break
+        if round_index == max_offsets or candidate_mjd is None:
+            break
+
+        candidate_offsets.append(candidate_mjd)
+        working_source = temp_dir / f"{station}_offset_round_{round_index + 1}.mom"
+        write_mom_with_offset_headers(raw_mom_path, working_source, candidate_offsets)
+
+    best_index = min(range(len(bic_values)), key=lambda index: bic_values[index])
+    accepted_offsets = candidate_offsets[:best_index]
+    offset_mom_path = obs_dir / f"{station}.mom"
+    write_mom_with_offset_headers(raw_mom_path, offset_mom_path, accepted_offsets)
+
+    LOGGER.info(
+        "%s: accepted %d offset(s): %s",
+        station,
+        len(accepted_offsets),
+        ", ".join(f"{offset:.1f}" for offset in accepted_offsets) if accepted_offsets else "none",
+    )
+    return offset_mom_path, accepted_offsets
+
+
 def read_mom_series(mom_path: Path) -> tuple[list[float], list[float], list[float]]:
     x_values: list[float] = []
     data_values: list[float] = []
@@ -543,7 +749,20 @@ def downsample_for_plot(
     return (x_values[::stride], *(values[::stride] for values in y_values))
 
 
-def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
+def add_offset_markers(axis, offsets_mjd: list[float]) -> None:
+    for index, offset_mjd in enumerate(offsets_mjd):
+        axis.axvline(
+            mjd_to_year(offset_mjd),
+            color="crimson",
+            linestyle="--",
+            linewidth=0.9,
+            alpha=0.75,
+            label="Detected offset" if index == 0 else None,
+        )
+
+
+def make_data_plots(station: str, mom_path: Path, figure_dir: Path, offsets_mjd: list[float] | None = None) -> None:
+    offsets_mjd = offsets_mjd or []
     with timed_step(f"{station}: read MOM series for data/residual plots"):
         years, data_values, model_values = read_mom_series(mom_path)
     LOGGER.info("%s: data/residual plots loaded %d samples", station, len(years))
@@ -607,6 +826,7 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
         axis.set_title(station)
         axis.set_xlabel("Years")
         axis.set_ylabel("mm")
+        add_offset_markers(axis, offsets_mjd)
         axis.legend()
         with timed_step(f"{station}: layout data plot"):
             fig.tight_layout()
@@ -628,6 +848,7 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
         axis.set_title(station)
         axis.set_xlabel("Years")
         axis.set_ylabel("Residual (mm)")
+        add_offset_markers(axis, offsets_mjd)
         axis.legend()
         with timed_step(f"{station}: layout residual plot"):
             fig.tight_layout()
@@ -795,6 +1016,7 @@ def make_station_component_data_plot(
         rms_data = compute_rms(data_values)
         rms_residuals = compute_rms(residuals)
         component_label = str(metadata["component_label"])
+        offsets_mjd = [float(value) for value in metadata.get("offsets_mjd", [])]
         axis.plot(years, data_values, ".", markersize=2, label=f"{component_label} data RMS={rms_data:.3f} mm")
         axis.plot(
             years,
@@ -803,6 +1025,7 @@ def make_station_component_data_plot(
             linewidth=1.2,
             label=format_model_legend(result["estimatetrend"]),
         )
+        add_offset_markers(axis, offsets_mjd)
         axis.set_ylabel("mm")
         axis.set_title(f"{component_label} residual RMS={rms_residuals:.3f} mm")
         axis.legend(loc="best", fontsize=9)
@@ -1145,6 +1368,9 @@ def analyse_station(
     fit_halfseasonal: bool | None,
     keep_temp_config: bool,
     make_psd_plots: bool,
+    find_offsets: bool,
+    max_offsets: int,
+    offset_penalty: float | None,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     paths = config["paths"]
     hector_removeoutliers = Path(str(paths["hector_removeoutliers"]))
@@ -1153,6 +1379,9 @@ def analyse_station(
         hector_removeoutliers,
         hector_estimatetrend,
     ]
+    if find_offsets:
+        hector_findoffset = Path(str(paths.get("hector_findoffset", Path(str(paths["hector_home"])) / "findoffset")))
+        binary_paths.append(hector_findoffset)
     if make_psd_plots:
         hector_estimatespectrum = Path(str(paths["hector_estimatespectrum"]))
         hector_modelspectrum = Path(str(Path(str(paths["hector_home"])) / "modelspectrum"))
@@ -1166,6 +1395,7 @@ def analyse_station(
         ensure_executable(binary_path)
 
     raw_dir = project_dir / str(paths["raw_files_dir"])
+    obs_dir = project_dir / str(paths["obs_files_dir"])
     pre_dir = project_dir / str(paths["pre_files_dir"])
     mom_dir = project_dir / str(paths["mom_files_dir"])
     fil_dir = project_dir / str(paths["fil_files_dir"])
@@ -1180,13 +1410,33 @@ def analyse_station(
 
     pre_dir.mkdir(parents=True, exist_ok=True)
     mom_dir.mkdir(parents=True, exist_ok=True)
+    obs_dir.mkdir(parents=True, exist_ok=True)
 
     kept_temp_dir: Path | None = None
+    analysis_input_dir = raw_dir
+    offsets_mjd: list[float] = []
     with timed_step(f"{station}: Hector commands and individual plots"):
         with temporary_run_directory(project_dir, station, keep_temp_config) as temp_dir:
             if keep_temp_config:
                 kept_temp_dir = temp_dir
                 LOGGER.info("Keeping temporary run directory for %s: %s", station, temp_dir)
+
+            if find_offsets:
+                with timed_step(f"{station}: find offsets"):
+                    offset_mom_path, offsets_mjd = run_find_offsets(
+                        station=station,
+                        raw_mom_path=input_mom_path,
+                        obs_dir=obs_dir,
+                        temp_dir=temp_dir,
+                        hector_findoffset=hector_findoffset,
+                        findoffset_template=hector_config_dir / "findoffset.ctl",
+                        noisemodels=noisemodels,
+                        offset_penalty=offset_penalty,
+                        fit_seasonal=fit_seasonal,
+                        fit_halfseasonal=fit_halfseasonal,
+                        max_offsets=max_offsets,
+                    )
+                analysis_input_dir = offset_mom_path.parent
 
             removeoutliers_ctl = temp_dir / "removeoutliers.ctl"
             with timed_step(f"{station}: prepare removeoutliers.ctl"):
@@ -1194,7 +1444,7 @@ def analyse_station(
                     removeoutliers_ctl,
                     hector_config_dir / "removeoutliers.ctl",
                     station,
-                    raw_dir,
+                    analysis_input_dir,
                     pre_dir,
                     freq,
                     fit_seasonal,
@@ -1284,7 +1534,7 @@ def analyse_station(
                 with timed_step(f"{station}: make PSD plot"):
                     make_psd_plot(station, temp_dir, psd_figure_dir)
             with timed_step(f"{station}: make data/residual plots"):
-                make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
+                make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir, offsets_mjd)
             if make_psd_plots:
                 with timed_step(f"{station}: cache PSD scratch outputs"):
                     psd_cache_dir = fil_dir / "psd_cache"
@@ -1311,6 +1561,7 @@ def analyse_station(
         "lomb_signal_plot": str(psd_figure_dir / f"{station}_lomb_signal_days.png"),
         "lomb_residuals_plot": str(psd_figure_dir / f"{station}_lomb_residuals_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
+        "offsets_mjd": offsets_mjd,
     }
     if make_psd_plots:
         metadata["psd_plot"] = str(psd_figure_dir / f"{station}_psd.png")
@@ -1378,6 +1629,10 @@ def write_station_summary_report(
             lines.append(f"- PSD plot: `{metadata['psd_plot']}`")
         if "temp_config_dir" in metadata:
             lines.append(f"- Temporary run directory: `{metadata['temp_config_dir']}`")
+        offsets_mjd = metadata.get("offsets_mjd")
+        if isinstance(offsets_mjd, list) and offsets_mjd:
+            formatted_offsets = ", ".join(f"{float(offset):.1f}" for offset in offsets_mjd)
+            lines.append(f"- Detected offsets MJD: `{formatted_offsets}`")
 
         trend_keys = ("trend", "trend_sigma", "bias", "driving_noise")
         available_est_keys = [key for key in trend_keys if key in est_json]
@@ -1422,6 +1677,9 @@ def analyse_project(
     fit_halfseasonal: bool | None,
     keep_temp_config: bool,
     make_psd_plots: bool,
+    find_offsets: bool,
+    max_offsets: int,
+    offset_penalty: float | None,
 ) -> tuple[Path, int, list[Path]]:
     with timed_step(f"{project_name}: load project config and collect MOM files"):
         project_dir, config = load_project_config(project_name)
@@ -1447,6 +1705,9 @@ def analyse_project(
                 fit_halfseasonal,
                 keep_temp_config,
                 make_psd_plots,
+                find_offsets,
+                max_offsets,
+                offset_penalty,
             )
         if "temp_config_dir" in metadata:
             kept_temp_dirs.append(Path(str(metadata["temp_config_dir"])))
@@ -1511,6 +1772,9 @@ def main() -> int:
                 fit_halfseasonal=args.fit_halfseasonal,
                 keep_temp_config=args.keep_temp_config,
                 make_psd_plots=args.make_psd_plots,
+                find_offsets=args.find_offsets,
+                max_offsets=args.max_offsets,
+                offset_penalty=args.offset_penalty,
             )
     except (FileNotFoundError, ValueError, KeyError, RuntimeError) as exc:
         parser.error(str(exc))
