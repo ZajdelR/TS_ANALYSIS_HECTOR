@@ -11,7 +11,7 @@ Edit it to match your machine before creating projects, especially:
 - `defaults.project_root`
 - `defaults.hector_home`
 
-Analysis choices are intentionally not stored in `machine_config.yaml`. Pass them to `analyse-and-plot` for each run, for example with `--noise-model`, `--freq`, `--fit-seasonal`, and `--fit-halfseasonal`.
+Analysis choices are intentionally not stored in `machine_config.yaml`. Configure them in the project-local Hector `.ctl` files, or override selected options for one run with `analyse-and-plot` arguments such as `--noise-model`, `--freq`, `--fit-seasonal`, and `--fit-halfseasonal`.
 
 `initiate-project` reads this file and uses it as the base for machine-specific paths in each new `config/config.yaml`. Command-line options such as `--project-root` and `--hector-home` still override the machine config for one-off runs.
 
@@ -112,7 +112,7 @@ Each initialized project currently contains:
 - `sea_files/`
 - `fil_files/`
 
-The generated `config.yaml` stores project paths, HECTOR executable paths, and input-file placeholders. Analysis choices are supplied per `analyse-and-plot` run.
+The generated `config.yaml` stores project paths, HECTOR executable paths, and input-file placeholders. Analysis choices come from the project-local Hector `.ctl` files unless they are overridden per `analyse-and-plot` run.
 
 The `.ctl` files in `example_hector_config/` are repository defaults. During
 project initialization they are copied into the project-local
@@ -218,25 +218,25 @@ Run a project-aware adaptation of Hector's `analyse_and_plot.py` on the MOM
 files in `raw_files/`:
 
 ```bash
-analyse-and-plot my_project --noise-model PLWN
+analyse-and-plot my_project
 ```
 
 To analyse one station and automatically include its available `_0`, `_1`, `_2`
 components:
 
 ```bash
-analyse-and-plot my_project --station station --noise-model PLWN
+analyse-and-plot my_project --station station
 ```
 
 Equivalent direct Python entrypoint:
 
 ```bash
-python3 scripts/analyse_and_plot_project.py my_project --noise-model PLWN
+python3 scripts/analyse_and_plot_project.py my_project
 ```
 
 Analysis arguments:
 
-- `--noise-model PLWN` to choose the noise model for this analysis run. This is required.
+- `--noise-model PLWN` to override the project-local `.ctl` noise model for this run.
 - `--station station` to process one station marker and include all matching component files.
 - `--freq 0.0172` to add an extra periodic signal frequency.
 - `--fit-seasonal` to force `seasonalsignal yes` for this run.
@@ -247,7 +247,7 @@ Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
 - `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates
-- for each run, temporary `.ctl` files are written under a `hector_run_*` directory with run-specific fields such as input/output paths, JSON output, selected noise model, and requested periodic signals
+- for each run, temporary `.ctl` files are written under a `hector_run_*` directory with run-specific fields such as input/output paths, JSON output, optional noise-model override, and requested periodic signals
 - by default, the `hector_run_*` directory is deleted when each station/component finishes; use `--keep-temp-config` to preserve it
 - the project-local files in `config/hector/` are not modified by `analyse-and-plot`
 - if `--fit-seasonal` is absent, the existing `seasonalsignal` value from the project `.ctl` template is preserved

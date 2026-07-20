@@ -31,8 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("project_name", help="Registered project name.")
     parser.add_argument(
         "--noise-model",
-        required=True,
-        help="Noise model abbreviation string for this analysis run, for example PLWN.",
+        default="",
+        help="Optional noise model abbreviation override for this run, for example PLWN.",
     )
     parser.add_argument(
         "--station",
@@ -201,7 +201,7 @@ def create_estimatetrend_ctl_file(
     station: str,
     pre_dir: Path,
     mom_dir: Path,
-    noisemodels: list[str],
+    noisemodels: list[str] | None,
     freq: float,
     fit_seasonal: bool | None,
     fit_halfseasonal: bool | None,
@@ -212,37 +212,38 @@ def create_estimatetrend_ctl_file(
     settings["OutputFile"] = str(mom_dir / f"{station}.mom")
     settings["JSON"] = "yes"
 
-    names = ""
     need_1mphi = False
     need_varying_phi = False
-    for noisemodel in noisemodels:
-        if noisemodel == "WN":
-            names += " White"
-        elif noisemodel in {"GGM", "fGGM"}:
-            names += " GGM"
-        elif noisemodel == "FN":
-            names += " FlickerGGM"
-            need_1mphi = True
-        elif noisemodel == "RW":
-            names += " RandomWalkGGM"
-            need_1mphi = True
-        elif noisemodel == "PL":
-            names += " GGM"
-            need_1mphi = True
-        elif noisemodel == "MT":
-            names += " Matern"
-        elif noisemodel == "VA":
-            names += " VaryingAnnual"
-            need_varying_phi = True
-        elif noisemodel == "VSA":
-            names += " VaryingSemiAnnual"
-            need_varying_phi = True
-        elif noisemodel == "AR1":
-            names += " ARMA"
-            settings["AR_p"] = "1"
-            settings["MA_q"] = "0"
+    if noisemodels is not None:
+        names = ""
+        for noisemodel in noisemodels:
+            if noisemodel == "WN":
+                names += " White"
+            elif noisemodel in {"GGM", "fGGM"}:
+                names += " GGM"
+            elif noisemodel == "FN":
+                names += " FlickerGGM"
+                need_1mphi = True
+            elif noisemodel == "RW":
+                names += " RandomWalkGGM"
+                need_1mphi = True
+            elif noisemodel == "PL":
+                names += " GGM"
+                need_1mphi = True
+            elif noisemodel == "MT":
+                names += " Matern"
+            elif noisemodel == "VA":
+                names += " VaryingAnnual"
+                need_varying_phi = True
+            elif noisemodel == "VSA":
+                names += " VaryingSemiAnnual"
+                need_varying_phi = True
+            elif noisemodel == "AR1":
+                names += " ARMA"
+                settings["AR_p"] = "1"
+                settings["MA_q"] = "0"
 
-    settings["NoiseModels"] = names.lstrip()
+        settings["NoiseModels"] = names.lstrip()
     if fit_seasonal:
         settings["seasonalsignal"] = "yes"
     if fit_halfseasonal:
@@ -251,7 +252,7 @@ def create_estimatetrend_ctl_file(
         settings["GGM_1mphi"] = "6.9e-06"
     if need_varying_phi and "phi_varying_fixed" not in settings:
         settings["phi_varying_fixed"] = "0.9999"
-    if "fGGM" in noisemodels:
+    if noisemodels is not None and "fGGM" in noisemodels:
         settings["GGM_1mphi"] = settings.get("GGM_1mphi", "0.02")
         settings["kappa_fixed"] = settings.get("kappa_fixed", "-1.0")
     if freq > 0.0:
@@ -269,7 +270,8 @@ def create_estimatespectrum_ctl_file(
     settings = load_ctl_template(template_path)
     settings["DataFile"] = f"{station}.mom"
     settings["DataDirectory"] = str(mom_dir)
-    settings["NoiseModels"] = noise_model
+    if noise_model:
+        settings["NoiseModels"] = noise_model
     write_ctl_file(ctl_path, settings)
 
 
@@ -981,7 +983,7 @@ def analyse_station(
     data_figure_dir = fil_dir / "data_figures"
     psd_figure_dir = fil_dir / "psd_figures"
 
-    noisemodels = parse_noisemodels(noise_model)
+    noisemodels = parse_noisemodels(noise_model) if noise_model else None
     input_mom_path = raw_dir / f"{station}.mom"
     if not input_mom_path.exists():
         raise FileNotFoundError(f"Input MOM file does not exist: {input_mom_path}")
@@ -1226,6 +1228,7 @@ def analyse_project(
     removeoutliers_results: dict[str, object] = {}
     grouped_results: dict[str, list[dict[str, object]]] = {}
     kept_temp_dirs: list[Path] = []
+    noise_model_label = noise_model if noise_model else "project-local .ctl templates"
     for mom_file in mom_files:
         station_name = mom_file.stem
         est_json, rem_json, metadata = analyse_station(
@@ -1274,7 +1277,7 @@ def analyse_project(
                 make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
                 make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "signal")
                 make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
-        write_station_summary_report(marker, report_dir, noise_model, freq, sorted_results)
+        write_station_summary_report(marker, report_dir, noise_model_label, freq, sorted_results)
 
     return mom_dir, len(mom_files), kept_temp_dirs
 

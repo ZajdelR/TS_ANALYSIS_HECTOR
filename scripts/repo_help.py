@@ -39,7 +39,7 @@ Main workflow
        convert-neu-to-mom my_project
 
   5. Analyse and plot
-       analyse-and-plot my_project --noise-model PLWN
+       analyse-and-plot my_project
 
 Project structure
   config/
@@ -102,8 +102,8 @@ Common outputs
     Station summary reports
 
 Notes
-  - Analysis choices are passed to analyse-and-plot for each run.
-  - --noise-model is required, for example --noise-model PLWN.
+  - Analysis choices come from the project-local config/hector/ .ctl files.
+  - --noise-model is optional and overrides the .ctl noise model for one run.
   - project_registry.json maps project names to absolute project paths.
 """
 
