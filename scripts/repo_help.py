@@ -77,9 +77,9 @@ HECTOR control files
   - initiate-project copies those .ctl files into config/hector/ inside the
     project.
   - analyse-and-plot reads the project-local config/hector/ files as templates.
-  - For each run it writes temporary .ctl files in a short-lived hector_run_*
-    directory and applies run-specific values there.
-  - Use analyse-and-plot --keep-temp-config to preserve the hector_run_*
+  - For each run it writes temporary .ctl files under
+    hector_run_temp/STATION_DATE_TIME and applies run-specific values there.
+  - Use analyse-and-plot --keep-temp-config to preserve that temporary run
     directory for inspection after the run.
   - analyse-and-plot does not modify the project-local config/hector/ files.
 

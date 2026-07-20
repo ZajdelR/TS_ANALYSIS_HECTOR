@@ -241,14 +241,14 @@ Analysis arguments:
 - `--freq 0.0172` to add an extra periodic signal frequency.
 - `--fit-seasonal` to force `seasonalsignal yes` for this run.
 - `--fit-halfseasonal` to force `halfseasonalsignal yes` for this run.
-- `--keep-temp-config` to keep the generated `hector_run_*` directory for inspection after the run.
+- `--keep-temp-config` to keep the generated `hector_run_temp/STATION_DATE_TIME` directory for inspection after the run.
 
 Runtime note:
 
 - the configured HECTOR binaries must be executable, for example `chmod +x /home/rade/HECTOR_TEMP/*`
 - `analyse-and-plot` uses the project-local files in `config/hector/` as the base HECTOR control templates
-- for each run, temporary `.ctl` files are written under a `hector_run_*` directory with run-specific fields such as input/output paths, JSON output, optional noise-model override, and requested periodic signals
-- by default, the `hector_run_*` directory is deleted when each station/component finishes; use `--keep-temp-config` to preserve it
+- for each run, temporary `.ctl` files are written under `hector_run_temp/STATION_DATE_TIME` with run-specific fields such as input/output paths, JSON output, optional noise-model override, and requested periodic signals
+- by default, each station/component temporary run directory is deleted when it finishes; use `--keep-temp-config` to preserve it
 - the project-local files in `config/hector/` are not modified by `analyse-and-plot`
 - if `--fit-seasonal` is absent, the existing `seasonalsignal` value from the project `.ctl` template is preserved
 - if `--fit-halfseasonal` is absent, the existing `halfseasonalsignal` value from the project `.ctl` template is preserved

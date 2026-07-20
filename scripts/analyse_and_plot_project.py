@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+from datetime import datetime
 import json
 import math
 import os
 import re
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--keep-temp-config",
         action="store_true",
-        help="Keep the generated hector_run_* directory with temporary .ctl files and Hector scratch outputs.",
+        help="Keep the generated hector_run_temp/STATION_DATE_TIME directory with temporary .ctl files and Hector scratch outputs.",
     )
     return parser
 
@@ -952,6 +952,34 @@ def ensure_executable(binary_path: Path) -> None:
         )
 
 
+def get_safe_run_directory_name(station: str) -> str:
+    safe_station = re.sub(r"[^A-Za-z0-9._-]+", "_", station).strip("._-")
+    if not safe_station:
+        safe_station = "station"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{safe_station}_{timestamp}"
+
+
+@contextlib.contextmanager
+def temporary_run_directory(project_dir: Path, station: str, keep: bool):
+    temp_root = project_dir / "hector_run_temp"
+    temp_root.mkdir(parents=True, exist_ok=True)
+
+    directory_name = get_safe_run_directory_name(station)
+    temp_dir = temp_root / directory_name
+    suffix = 2
+    while temp_dir.exists():
+        temp_dir = temp_root / f"{directory_name}_{suffix}"
+        suffix += 1
+
+    temp_dir.mkdir()
+    try:
+        yield temp_dir
+    finally:
+        if not keep:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def analyse_station(
     station: str,
     project_dir: Path,
@@ -992,15 +1020,7 @@ def analyse_station(
     mom_dir.mkdir(parents=True, exist_ok=True)
 
     kept_temp_dir: Path | None = None
-    if keep_temp_config:
-        temp_context = contextlib.nullcontext(
-            tempfile.mkdtemp(dir=project_dir, prefix="hector_run_")
-        )
-    else:
-        temp_context = tempfile.TemporaryDirectory(dir=project_dir, prefix="hector_run_")
-
-    with temp_context as temp_dir_name:
-        temp_dir = Path(temp_dir_name)
+    with temporary_run_directory(project_dir, station, keep_temp_config) as temp_dir:
         if keep_temp_config:
             kept_temp_dir = temp_dir
             print(f"Keeping temporary run directory for {station}: {temp_dir}")
