@@ -28,6 +28,8 @@ except ModuleNotFoundError:
 
 LOGGER = logging.getLogger("analyse-and-plot")
 MAX_PLOT_POINTS = 20000
+DATA_MARKER_PIXEL_THRESHOLD = 5000
+DATA_PLOT_DPI = 100
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -560,33 +562,65 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
 
     figure_dir.mkdir(parents=True, exist_ok=True)
 
+    data_marker = "," if len(plot_years) > DATA_MARKER_PIXEL_THRESHOLD else "."
+    data_markersize = 1 if data_marker == "," else 3
+    if data_marker == ",":
+        LOGGER.info(
+            "%s: using pixel markers for %d rendered data points",
+            station,
+            len(plot_years),
+        )
+
     with timed_step(f"{station}: render/save data plot"):
         fig, axis = plt.subplots(figsize=(10, 6))
-        axis.plot(plot_years, plot_data, ".", markersize=3, label=f"Data RMS={rms_data:.3f} mm")
-        axis.plot(plot_years, plot_model, "-", linewidth=1.5, label="Model")
+        with timed_step(f"{station}: draw data/model artists"):
+            axis.plot(
+                plot_years,
+                plot_data,
+                linestyle="none",
+                marker=data_marker,
+                markersize=data_markersize,
+                markeredgewidth=0,
+                antialiased=False,
+                label=f"Data RMS={rms_data:.3f} mm",
+            )
+            axis.plot(
+                plot_years,
+                plot_model,
+                "-",
+                linewidth=1.0,
+                antialiased=False,
+                label="Model",
+            )
         axis.set_title(station)
         axis.set_xlabel("Years")
         axis.set_ylabel("mm")
         axis.legend()
-        fig.tight_layout()
-        fig.savefig(figure_dir / f"{station}_data.png", dpi=150)
+        with timed_step(f"{station}: layout data plot"):
+            fig.tight_layout()
+        with timed_step(f"{station}: save data plot PNG"):
+            fig.savefig(figure_dir / f"{station}_data.png", dpi=DATA_PLOT_DPI)
         plt.close(fig)
 
     with timed_step(f"{station}: render/save residual plot"):
         fig, axis = plt.subplots(figsize=(10, 4))
-        axis.plot(
-            residual_years,
-            plot_residuals,
-            "-",
-            linewidth=1.0,
-            label=f"Residual RMS={rms_residuals:.3f} mm",
-        )
+        with timed_step(f"{station}: draw residual artist"):
+            axis.plot(
+                residual_years,
+                plot_residuals,
+                "-",
+                linewidth=0.8,
+                antialiased=False,
+                label=f"Residual RMS={rms_residuals:.3f} mm",
+            )
         axis.set_title(station)
         axis.set_xlabel("Years")
         axis.set_ylabel("Residual (mm)")
         axis.legend()
-        fig.tight_layout()
-        fig.savefig(figure_dir / f"{station}_res.png", dpi=150)
+        with timed_step(f"{station}: layout residual plot"):
+            fig.tight_layout()
+        with timed_step(f"{station}: save residual plot PNG"):
+            fig.savefig(figure_dir / f"{station}_res.png", dpi=DATA_PLOT_DPI)
         plt.close(fig)
 
 
