@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 
 
 LOGGER = logging.getLogger("analyse-and-plot")
+MAX_PLOT_POINTS = 20000
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -506,34 +507,87 @@ def compute_rms(values: list[float]) -> float:
     return math.sqrt(sum(value * value for value in values) / len(values))
 
 
+def downsample_for_plot(
+    station: str,
+    plot_name: str,
+    x_values: np.ndarray,
+    *y_values: np.ndarray,
+    max_points: int = MAX_PLOT_POINTS,
+) -> tuple[np.ndarray, ...]:
+    point_count = len(x_values)
+    if point_count <= max_points:
+        return (x_values, *y_values)
+
+    stride = math.ceil(point_count / max_points)
+    LOGGER.info(
+        "%s: downsampling %s plot from %d to %d points for rendering",
+        station,
+        plot_name,
+        point_count,
+        len(x_values[::stride]),
+    )
+    return (x_values[::stride], *(values[::stride] for values in y_values))
+
+
 def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
-    years, data_values, model_values = read_mom_series(mom_path)
-    residuals = [data - model for data, model in zip(data_values, model_values)]
-    rms_data = compute_rms(data_values)
-    rms_residuals = compute_rms(residuals)
+    with timed_step(f"{station}: read MOM series for data/residual plots"):
+        years, data_values, model_values = read_mom_series(mom_path)
+    LOGGER.info("%s: data/residual plots loaded %d samples", station, len(years))
+    with timed_step(f"{station}: prepare data/residual arrays"):
+        years_array = np.asarray(years, dtype=float)
+        data_array = np.asarray(data_values, dtype=float)
+        model_array = np.asarray(model_values, dtype=float)
+        residuals_array = data_array - model_array
+        rms_data = float(np.sqrt(np.mean(data_array * data_array))) if len(data_array) else float("nan")
+        rms_residuals = (
+            float(np.sqrt(np.mean(residuals_array * residuals_array)))
+            if len(residuals_array)
+            else float("nan")
+        )
+        plot_years, plot_data, plot_model = downsample_for_plot(
+            station,
+            "data/model",
+            years_array,
+            data_array,
+            model_array,
+        )
+        residual_years, plot_residuals = downsample_for_plot(
+            station,
+            "residual",
+            years_array,
+            residuals_array,
+        )
 
     figure_dir.mkdir(parents=True, exist_ok=True)
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(years, data_values, ".", markersize=3, label=f"Data RMS={rms_data:.3f} mm")
-    plt.plot(years, model_values, "-", linewidth=1.5, label="Model")
-    plt.title(station)
-    plt.xlabel("Years")
-    plt.ylabel("mm")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(figure_dir / f"{station}_data.png", dpi=150)
-    plt.close()
+    with timed_step(f"{station}: render/save data plot"):
+        fig, axis = plt.subplots(figsize=(10, 6))
+        axis.plot(plot_years, plot_data, ".", markersize=3, label=f"Data RMS={rms_data:.3f} mm")
+        axis.plot(plot_years, plot_model, "-", linewidth=1.5, label="Model")
+        axis.set_title(station)
+        axis.set_xlabel("Years")
+        axis.set_ylabel("mm")
+        axis.legend()
+        fig.tight_layout()
+        fig.savefig(figure_dir / f"{station}_data.png", dpi=150)
+        plt.close(fig)
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(years, residuals, "-", linewidth=1.0, label=f"Residual RMS={rms_residuals:.3f} mm")
-    plt.title(station)
-    plt.xlabel("Years")
-    plt.ylabel("Residual (mm)")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(figure_dir / f"{station}_res.png", dpi=150)
-    plt.close()
+    with timed_step(f"{station}: render/save residual plot"):
+        fig, axis = plt.subplots(figsize=(10, 4))
+        axis.plot(
+            residual_years,
+            plot_residuals,
+            "-",
+            linewidth=1.0,
+            label=f"Residual RMS={rms_residuals:.3f} mm",
+        )
+        axis.set_title(station)
+        axis.set_xlabel("Years")
+        axis.set_ylabel("Residual (mm)")
+        axis.legend()
+        fig.tight_layout()
+        fig.savefig(figure_dir / f"{station}_res.png", dpi=150)
+        plt.close(fig)
 
 
 def format_number(value: object) -> str:
