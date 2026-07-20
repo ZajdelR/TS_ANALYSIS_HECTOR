@@ -50,6 +50,7 @@ Project structure
   obs_files/
   pre_files/
   mom_files/
+  json_output/
   sea_files/
   fil_files/
 
@@ -89,8 +90,11 @@ Common outputs
 
   mom_files/
     Analysed MOM files
-    hector_estimatetrend.json
-    hector_removeoutliers.json
+
+  json_output/
+    Station/project-named Hector JSON summaries
+    *_hector_estimatetrend.json
+    *_hector_removeoutliers.json
 
   fil_files/data_figures/
     Per-component and combined time-series plots

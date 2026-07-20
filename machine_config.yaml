@@ -8,6 +8,7 @@ paths:
   obs_files_dir: "obs_files"
   pre_files_dir: "pre_files"
   mom_files_dir: "mom_files"
+  json_output_dir: "json_output"
   sea_files_dir: "sea_files"
   fil_files_dir: "fil_files"
 files:

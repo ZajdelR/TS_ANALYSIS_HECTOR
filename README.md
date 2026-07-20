@@ -109,6 +109,7 @@ Each initialized project currently contains:
 - `obs_files/`
 - `pre_files/`
 - `mom_files/`
+- `json_output/`
 - `sea_files/`
 - `fil_files/`
 
@@ -269,7 +270,7 @@ Outputs:
 - offset-annotated MOM files in `obs_files/` when `--find-offsets` is used
 - cleaned files in `pre_files/`
 - analysed MOM files in `mom_files/`
-- aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
+- aggregated Hector JSON files in `json_output/`, named with the station or project identifier, for example `STATION_hector_estimatetrend.json` and `STATION_hector_removeoutliers.json`
 - PNG time-series plots in `fil_files/data_figures/` and period/Lomb plots in `fil_files/psd_figures/`
   : when `--make-psd-plots` is used, per-component PSD plots include the standard `*_psd.png` view
   : Lomb-Scargle period plots are written separately as `*_lomb_signal_days.png` and `*_lomb_residuals_days.png`
