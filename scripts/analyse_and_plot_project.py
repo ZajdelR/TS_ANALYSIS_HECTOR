@@ -16,6 +16,9 @@ import subprocess
 import time
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import lombscargle
@@ -30,6 +33,15 @@ LOGGER = logging.getLogger("analyse-and-plot")
 MAX_PLOT_POINTS = 20000
 DATA_MARKER_PIXEL_THRESHOLD = 5000
 DATA_PLOT_DPI = 100
+PNG_COMPRESS_LEVEL = 1
+
+
+def save_png(fig, output_path: Path, dpi: int = 150) -> None:
+    fig.savefig(
+        output_path,
+        dpi=dpi,
+        pil_kwargs={"compress_level": PNG_COMPRESS_LEVEL, "optimize": False},
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -599,7 +611,7 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
         with timed_step(f"{station}: layout data plot"):
             fig.tight_layout()
         with timed_step(f"{station}: save data plot PNG"):
-            fig.savefig(figure_dir / f"{station}_data.png", dpi=DATA_PLOT_DPI)
+            save_png(fig, figure_dir / f"{station}_data.png", dpi=DATA_PLOT_DPI)
         plt.close(fig)
 
     with timed_step(f"{station}: render/save residual plot"):
@@ -620,7 +632,7 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path) -> None:
         with timed_step(f"{station}: layout residual plot"):
             fig.tight_layout()
         with timed_step(f"{station}: save residual plot PNG"):
-            fig.savefig(figure_dir / f"{station}_res.png", dpi=DATA_PLOT_DPI)
+            save_png(fig, figure_dir / f"{station}_res.png", dpi=DATA_PLOT_DPI)
         plt.close(fig)
 
 
@@ -810,7 +822,7 @@ def make_station_component_data_plot(
     axes[-1].set_xlabel("Years")
     fig.suptitle(marker, fontsize=14)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    fig.savefig(figure_dir / f"{marker}_components_data.png", dpi=150)
+    save_png(fig, figure_dir / f"{marker}_components_data.png")
     plt.close(fig)
     plt.close()
 
@@ -857,7 +869,7 @@ def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
     plt.ylabel("Power (mm^2/cpy)")
     plt.tight_layout()
     plt.legend()
-    plt.savefig(figure_dir / f"{station}_psd.png", dpi=150)
+    save_png(plt.gcf(), figure_dir / f"{station}_psd.png")
     plt.close()
 
 
@@ -925,7 +937,7 @@ def make_lomb_scargle_period_plot(
     plt.title(title)
     plt.tight_layout()
     plt.legend()
-    plt.savefig(output_path, dpi=150)
+    save_png(plt.gcf(), output_path)
     plt.close()
 
 
@@ -999,7 +1011,7 @@ def make_station_component_psd_plot(
 
     axes[-1].set_xlabel("Frequency (cpy)")
     fig.tight_layout()
-    fig.savefig(figure_dir / f"{marker}_components_psd.png", dpi=150)
+    save_png(fig, figure_dir / f"{marker}_components_psd.png")
     plt.close(fig)
 
 
@@ -1055,7 +1067,7 @@ def make_station_component_lomb_plot(
     axes[-1].set_xlabel("Period (days)")
     fig.tight_layout()
     suffix = "signal" if kind == "signal" else "residuals"
-    fig.savefig(figure_dir / f"{marker}_components_lomb_{suffix}_days.png", dpi=150)
+    save_png(fig, figure_dir / f"{marker}_components_lomb_{suffix}_days.png")
     plt.close(fig)
 
 
