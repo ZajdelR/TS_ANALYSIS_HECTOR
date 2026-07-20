@@ -45,17 +45,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Extra periodic signal frequency.",
     )
-    parser.add_argument(
+    seasonal_group = parser.add_mutually_exclusive_group()
+    seasonal_group.add_argument(
         "--fit-seasonal",
         action="store_true",
         default=None,
         help="Set seasonalsignal to yes for this run.",
     )
-    parser.add_argument(
+    seasonal_group.add_argument(
+        "--no-fit-seasonal",
+        action="store_false",
+        dest="fit_seasonal",
+        help="Set seasonalsignal to no for this run.",
+    )
+    halfseasonal_group = parser.add_mutually_exclusive_group()
+    halfseasonal_group.add_argument(
         "--fit-halfseasonal",
         action="store_true",
         default=None,
         help="Set halfseasonalsignal to yes for this run.",
+    )
+    halfseasonal_group.add_argument(
+        "--no-fit-halfseasonal",
+        action="store_false",
+        dest="fit_halfseasonal",
+        help="Set halfseasonalsignal to no for this run.",
     )
     parser.add_argument(
         "--keep-temp-config",
@@ -186,10 +200,10 @@ def create_removeoutliers_ctl_file(
     settings["DataDirectory"] = str(raw_dir)
     settings["OutputFile"] = str(pre_dir / f"{station}.mom")
     settings["JSON"] = "yes"
-    if fit_seasonal:
-        settings["seasonalsignal"] = "yes"
-    if fit_halfseasonal:
-        settings["halfseasonalsignal"] = "yes"
+    if fit_seasonal is not None:
+        settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
+    if fit_halfseasonal is not None:
+        settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
     if freq > 0.0:
         settings["periodicsignals"] = f"{freq:f}"
     write_ctl_file(ctl_path, settings)
@@ -244,10 +258,10 @@ def create_estimatetrend_ctl_file(
                 settings["MA_q"] = "0"
 
         settings["NoiseModels"] = names.lstrip()
-    if fit_seasonal:
-        settings["seasonalsignal"] = "yes"
-    if fit_halfseasonal:
-        settings["halfseasonalsignal"] = "yes"
+    if fit_seasonal is not None:
+        settings["seasonalsignal"] = "yes" if fit_seasonal else "no"
+    if fit_halfseasonal is not None:
+        settings["halfseasonalsignal"] = "yes" if fit_halfseasonal else "no"
     if need_1mphi and "GGM_1mphi" not in settings:
         settings["GGM_1mphi"] = "6.9e-06"
     if need_varying_phi and "phi_varying_fixed" not in settings:

@@ -104,6 +104,9 @@ Common outputs
 Notes
   - Analysis choices come from the project-local config/hector/ .ctl files.
   - --noise-model is optional and overrides the .ctl noise model for one run.
+  - --fit-seasonal/--no-fit-seasonal and
+    --fit-halfseasonal/--no-fit-halfseasonal override the matching .ctl values
+    for one run.
   - project_registry.json maps project names to absolute project paths.
 """
 
