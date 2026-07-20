@@ -1458,6 +1458,7 @@ def analyse_station(
 
     kept_temp_dir: Path | None = None
     analysis_input_dir = raw_dir
+    offset_mom_path: Path | None = None
     offsets_mjd: list[float] = []
     with timed_step(f"{station}: Hector commands and individual plots"):
         with temporary_run_directory(project_dir, station, keep_temp_config) as temp_dir:
@@ -1605,8 +1606,11 @@ def analyse_station(
         "lomb_signal_plot": str(psd_figure_dir / f"{station}_lomb_signal_days.png"),
         "lomb_residuals_plot": str(psd_figure_dir / f"{station}_lomb_residuals_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
+        "find_offsets_enabled": find_offsets,
         "offsets_mjd": offsets_mjd,
     }
+    if offset_mom_path is not None:
+        metadata["offset_mom_path"] = str(offset_mom_path)
     if make_psd_plots:
         metadata["psd_plot"] = str(psd_figure_dir / f"{station}_psd.png")
     if kept_temp_dir is not None:
@@ -1674,9 +1678,20 @@ def write_station_summary_report(
         if "temp_config_dir" in metadata:
             lines.append(f"- Temporary run directory: `{metadata['temp_config_dir']}`")
         offsets_mjd = metadata.get("offsets_mjd")
-        if isinstance(offsets_mjd, list) and offsets_mjd:
-            formatted_offsets = ", ".join(f"{float(offset):.1f}" for offset in offsets_mjd)
-            lines.append(f"- Detected offsets MJD: `{formatted_offsets}`")
+        if metadata.get("find_offsets_enabled"):
+            lines.append("")
+            lines.append("Offset detection:")
+            if "offset_mom_path" in metadata:
+                lines.append(f"- Offset-annotated MOM file: `{metadata['offset_mom_path']}`")
+            if isinstance(offsets_mjd, list) and offsets_mjd:
+                lines.append(f"- Accepted offsets: `{len(offsets_mjd)}`")
+                for offset in offsets_mjd:
+                    offset_value = float(offset)
+                    lines.append(
+                        f"- MJD `{offset_value:.1f}`; decimal year `{mjd_to_year(offset_value):.4f}`"
+                    )
+            else:
+                lines.append("- Accepted offsets: `0`")
 
         trend_keys = ("trend", "trend_sigma", "bias", "driving_noise")
         available_est_keys = [key for key in trend_keys if key in est_json]

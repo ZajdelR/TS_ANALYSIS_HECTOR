@@ -281,3 +281,4 @@ Outputs:
   : grouped Lomb-Scargle plots are written as `*_components_lomb_signal_days.png` and `*_components_lomb_residuals_days.png`
   : fitted trend, uncertainty, fitted signals, and fitted noise parameters are shown when available
 - Markdown station summary reports in `fil_files/reports/`
+  : when `--find-offsets` is used, reports include accepted offset counts, MJD values, decimal-year values, and the offset-annotated MOM file path
