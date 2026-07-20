@@ -92,7 +92,7 @@ Common outputs
     Analysed MOM files
 
   json_output/
-    Station/project-named Hector JSON summaries
+    Station-named Hector JSON summaries
     *_hector_estimatetrend.json
     *_hector_removeoutliers.json
 

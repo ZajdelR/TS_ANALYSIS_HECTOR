@@ -1736,10 +1736,6 @@ def analyse_project(
     grouped_results: dict[str, list[dict[str, object]]] = {}
     kept_temp_dirs: list[Path] = []
     noise_model_label = noise_model if noise_model else "project-local .ctl templates"
-    output_identifier = get_station_marker(station) if station else project_name
-    output_identifier = re.sub(r"[^A-Za-z0-9._-]+", "_", output_identifier).strip("._-")
-    if not output_identifier:
-        output_identifier = "analysis"
     for mom_file in mom_files:
         station_name = mom_file.stem
         with timed_step(f"{station_name}: station/component workflow"):
@@ -1774,16 +1770,26 @@ def analyse_project(
     mom_dir = project_dir / str(config["paths"]["mom_files_dir"])
     json_output_dir = project_dir / str(config["paths"].get("json_output_dir", "json_output"))
     fil_dir = project_dir / str(config["paths"]["fil_files_dir"])
-    with timed_step(f"{project_name}: write aggregate Hector JSON files"):
+    with timed_step(f"{project_name}: write station Hector JSON files"):
         json_output_dir.mkdir(parents=True, exist_ok=True)
-        (json_output_dir / f"{output_identifier}_hector_estimatetrend.json").write_text(
-            json.dumps(estimatetrend_results, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        (json_output_dir / f"{output_identifier}_hector_removeoutliers.json").write_text(
-            json.dumps(removeoutliers_results, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        for marker, component_results in grouped_results.items():
+            output_identifier = re.sub(r"[^A-Za-z0-9._-]+", "_", marker).strip("._-")
+            if not output_identifier:
+                output_identifier = "station"
+            marker_estimatetrend_results = {
+                item["station_name"]: item["estimatetrend"] for item in component_results
+            }
+            marker_removeoutliers_results = {
+                item["station_name"]: item["removeoutliers"] for item in component_results
+            }
+            (json_output_dir / f"{output_identifier}_hector_estimatetrend.json").write_text(
+                json.dumps(marker_estimatetrend_results, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            (json_output_dir / f"{output_identifier}_hector_removeoutliers.json").write_text(
+                json.dumps(marker_removeoutliers_results, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
     data_figure_dir = fil_dir / "data_figures"
     psd_figure_dir = fil_dir / "psd_figures"
