@@ -96,7 +96,8 @@ Common outputs
     Per-component and combined time-series plots
 
   fil_files/psd_figures/
-    Per-component and combined PSD plots
+    Lomb-Scargle period plots
+    PSD plots only when --make-psd-plots is used
 
   fil_files/reports/
     Station summary reports
@@ -107,6 +108,8 @@ Notes
   - --fit-seasonal/--no-fit-seasonal and
     --fit-halfseasonal/--no-fit-halfseasonal override the matching .ctl values
     for one run.
+  - PSD plots are skipped by default because the spectrum/model-spectrum steps
+    can be slow. Use --make-psd-plots when you need them.
   - Default INFO logs show START/DONE timing messages for Hector commands,
     plots, reports, and station/component workflows. Use --log-level WARNING
     for quieter output or --log-level DEBUG for more detail.

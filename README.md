@@ -244,6 +244,7 @@ Analysis arguments:
 - `--fit-halfseasonal` to force `halfseasonalsignal yes` for this run.
 - `--no-fit-halfseasonal` to force `halfseasonalsignal no` for this run.
 - `--keep-temp-config` to keep the generated `hector_run_temp/STATION_DATE_TIME` directory for inspection after the run.
+- `--make-psd-plots` to run the slower Hector spectrum/model-spectrum steps and write PSD plots. PSD plots are skipped by default.
 - `--log-level INFO` to control CLI logging verbosity. Use `INFO` for timing messages, `DEBUG` for command/temp-directory details, or `WARNING` for quieter output.
 
 Runtime note:
@@ -256,6 +257,7 @@ Runtime note:
 - if `--fit-seasonal` is absent, the existing `seasonalsignal` value from the project `.ctl` template is preserved
 - if `--fit-halfseasonal` is absent, the existing `halfseasonalsignal` value from the project `.ctl` template is preserved
 - if a positive or negative seasonal flag is provided, it forces the corresponding setting for that run
+- PSD plots are skipped by default; use `--make-psd-plots` when you need Hector spectrum/model-spectrum output
 - default `INFO` logs show `START`/`DONE` messages with elapsed seconds for Hector commands, plots, reports, and each station/component workflow
 
 Outputs:
@@ -263,12 +265,12 @@ Outputs:
 - cleaned files in `pre_files/`
 - analysed MOM files in `mom_files/`
 - aggregated `hector_estimatetrend.json` and `hector_removeoutliers.json` in `mom_files/`
-- PNG time-series and PSD plots in `fil_files/data_figures/` and `fil_files/psd_figures/`
-  : per-component PSD plots include the standard `*_psd.png` view
+- PNG time-series plots in `fil_files/data_figures/` and period/Lomb plots in `fil_files/psd_figures/`
+  : when `--make-psd-plots` is used, per-component PSD plots include the standard `*_psd.png` view
   : Lomb-Scargle period plots are written separately as `*_lomb_signal_days.png` and `*_lomb_residuals_days.png`
 - combined station subplot figures across available `_0/_1/_2` components when they exist
   : `components_data` is arranged as North, East, Up subplots and includes model annotations
-  : `components_psd` is also written as a grouped PSD figure for the available components
+  : when `--make-psd-plots` is used, `components_psd` is also written as a grouped PSD figure for the available components
   : grouped Lomb-Scargle plots are written as `*_components_lomb_signal_days.png` and `*_components_lomb_residuals_days.png`
   : fitted trend, uncertainty, fitted signals, and fitted noise parameters are shown when available
 - Markdown station summary reports in `fil_files/reports/`

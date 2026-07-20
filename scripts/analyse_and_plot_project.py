@@ -82,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Keep the generated hector_run_temp/STATION_DATE_TIME directory with temporary .ctl files and Hector scratch outputs.",
     )
     parser.add_argument(
+        "--make-psd-plots",
+        action="store_true",
+        help="Run Hector spectrum/model-spectrum steps and write PSD plots. Disabled by default because it can be slow.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -1039,18 +1044,25 @@ def analyse_station(
     fit_seasonal: bool | None,
     fit_halfseasonal: bool | None,
     keep_temp_config: bool,
+    make_psd_plots: bool,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     paths = config["paths"]
     hector_removeoutliers = Path(str(paths["hector_removeoutliers"]))
     hector_estimatetrend = Path(str(paths["hector_estimatetrend"]))
-    hector_estimatespectrum = Path(str(paths["hector_estimatespectrum"]))
-    hector_modelspectrum = Path(str(Path(str(paths["hector_home"])) / "modelspectrum"))
-    for binary_path in (
+    binary_paths = [
         hector_removeoutliers,
         hector_estimatetrend,
-        hector_estimatespectrum,
-        hector_modelspectrum,
-    ):
+    ]
+    if make_psd_plots:
+        hector_estimatespectrum = Path(str(paths["hector_estimatespectrum"]))
+        hector_modelspectrum = Path(str(Path(str(paths["hector_home"])) / "modelspectrum"))
+        binary_paths.extend(
+            [
+                hector_estimatespectrum,
+                hector_modelspectrum,
+            ]
+        )
+    for binary_path in binary_paths:
         ensure_executable(binary_path)
 
     raw_dir = project_dir / str(paths["raw_files_dir"])
@@ -1119,74 +1131,76 @@ def analyse_station(
                 estimatetrend_json = json.loads((temp_dir / "estimatetrend.json").read_text(encoding="utf-8"))
                 removeoutliers_json = json.loads((temp_dir / "removeoutliers.json").read_text(encoding="utf-8"))
 
-            with timed_step(f"{station}: read sampling info"):
-                sampling_period, _mjd0, _mjd1, number_of_points = read_sampling_info(mom_dir / f"{station}.mom")
+            if make_psd_plots:
+                with timed_step(f"{station}: read sampling info"):
+                    sampling_period, _mjd0, _mjd1, number_of_points = read_sampling_info(mom_dir / f"{station}.mom")
 
-            estimatespectrum_ctl = temp_dir / "estimatespectrum.ctl"
-            with timed_step(f"{station}: prepare estimatespectrum.ctl"):
-                create_estimatespectrum_ctl_file(
-                    estimatespectrum_ctl,
-                    hector_config_dir / "estimatespectrum.ctl",
-                    station,
-                    mom_dir,
-                    noise_model,
-                )
-            with timed_step(f"{station}: Hector estimatespectrum"):
-                output = subprocess.check_output([str(hector_estimatespectrum), "4"], cwd=temp_dir, text=True)
-                estimatespectrum_cols = output.split()
-                freq0 = estimatespectrum_cols[-5]
-                freq1 = estimatespectrum_cols[-3]
+                estimatespectrum_ctl = temp_dir / "estimatespectrum.ctl"
+                with timed_step(f"{station}: prepare estimatespectrum.ctl"):
+                    create_estimatespectrum_ctl_file(
+                        estimatespectrum_ctl,
+                        hector_config_dir / "estimatespectrum.ctl",
+                        station,
+                        mom_dir,
+                        noise_model,
+                    )
+                with timed_step(f"{station}: Hector estimatespectrum"):
+                    output = subprocess.check_output([str(hector_estimatespectrum), "4"], cwd=temp_dir, text=True)
+                    estimatespectrum_cols = output.split()
+                    freq0 = estimatespectrum_cols[-5]
+                    freq1 = estimatespectrum_cols[-3]
 
-            fixed_params = extract_optional_noise_parameters(estimatetrend_ctl)
+                fixed_params = extract_optional_noise_parameters(estimatetrend_ctl)
 
-            modelspectrum_ctl = temp_dir / "modelspectrum.ctl"
-            modelspectrum_input = temp_dir / "modelspectrum.txt"
-            fs = 1.0 / sampling_period
-            with timed_step(f"{station}: prepare modelspectrum inputs"):
-                create_modelspectrum_ctl_file(
-                    modelspectrum_ctl,
-                    hector_config_dir / "modelspectrum.ctl",
-                    station,
-                    mom_dir,
-                    estimatetrend_json,
-                    sampling_period,
-                    number_of_points,
-                    fixed_params,
-                )
-                create_modelspectrum_input(
-                    modelspectrum_input,
-                    estimatetrend_json,
-                    fs,
-                    freq0,
-                    freq1,
-                    fixed_params,
-                )
-            with timed_step(f"{station}: Hector modelspectrum"):
-                run_command(
-                    [str(hector_modelspectrum)],
-                    cwd=temp_dir,
-                    stdin_path=modelspectrum_input,
-                )
+                modelspectrum_ctl = temp_dir / "modelspectrum.ctl"
+                modelspectrum_input = temp_dir / "modelspectrum.txt"
+                fs = 1.0 / sampling_period
+                with timed_step(f"{station}: prepare modelspectrum inputs"):
+                    create_modelspectrum_ctl_file(
+                        modelspectrum_ctl,
+                        hector_config_dir / "modelspectrum.ctl",
+                        station,
+                        mom_dir,
+                        estimatetrend_json,
+                        sampling_period,
+                        number_of_points,
+                        fixed_params,
+                    )
+                    create_modelspectrum_input(
+                        modelspectrum_input,
+                        estimatetrend_json,
+                        fs,
+                        freq0,
+                        freq1,
+                        fixed_params,
+                    )
+                with timed_step(f"{station}: Hector modelspectrum"):
+                    run_command(
+                        [str(hector_modelspectrum)],
+                        cwd=temp_dir,
+                        stdin_path=modelspectrum_input,
+                    )
 
-            with timed_step(f"{station}: make PSD plot"):
-                make_psd_plot(station, temp_dir, psd_figure_dir)
+                with timed_step(f"{station}: make PSD plot"):
+                    make_psd_plot(station, temp_dir, psd_figure_dir)
             with timed_step(f"{station}: make data/residual plots"):
                 make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
-            with timed_step(f"{station}: cache PSD scratch outputs"):
-                psd_cache_dir = fil_dir / "psd_cache"
-                psd_cache_dir.mkdir(parents=True, exist_ok=True)
-                station_cache_dir = psd_cache_dir / station
-                if station_cache_dir.exists():
-                    shutil.rmtree(station_cache_dir)
-                station_cache_dir.mkdir(parents=True, exist_ok=True)
-                for filename in (
-                    "estimatespectrum.out",
-                    "modelspectrum.out",
-                    "modelspectrum_percentiles.out",
-                ):
-                    source = temp_dir / filename
-                    if source.exists():
-                        shutil.copy2(source, station_cache_dir / filename)
+            if make_psd_plots:
+                with timed_step(f"{station}: cache PSD scratch outputs"):
+                    psd_cache_dir = fil_dir / "psd_cache"
+                    psd_cache_dir.mkdir(parents=True, exist_ok=True)
+                    station_cache_dir = psd_cache_dir / station
+                    if station_cache_dir.exists():
+                        shutil.rmtree(station_cache_dir)
+                    station_cache_dir.mkdir(parents=True, exist_ok=True)
+                    for filename in (
+                        "estimatespectrum.out",
+                        "modelspectrum.out",
+                        "modelspectrum_percentiles.out",
+                    ):
+                        source = temp_dir / filename
+                        if source.exists():
+                            shutil.copy2(source, station_cache_dir / filename)
 
     metadata = {
         "marker": get_station_marker(station),
@@ -1194,11 +1208,12 @@ def analyse_station(
         "mom_path": str(mom_dir / f"{station}.mom"),
         "data_plot": str(data_figure_dir / f"{station}_data.png"),
         "residual_plot": str(data_figure_dir / f"{station}_res.png"),
-        "psd_plot": str(psd_figure_dir / f"{station}_psd.png"),
         "lomb_signal_plot": str(psd_figure_dir / f"{station}_lomb_signal_days.png"),
         "lomb_residuals_plot": str(psd_figure_dir / f"{station}_lomb_residuals_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
     }
+    if make_psd_plots:
+        metadata["psd_plot"] = str(psd_figure_dir / f"{station}_psd.png")
     if kept_temp_dir is not None:
         metadata["temp_config_dir"] = str(kept_temp_dir)
     with timed_step(f"{station}: make Lomb-Scargle signal plot"):
@@ -1257,9 +1272,10 @@ def write_station_summary_report(
                 f"- MOM file: `{metadata['mom_path']}`",
                 f"- Data plot: `{metadata['data_plot']}`",
                 f"- Residual plot: `{metadata['residual_plot']}`",
-                f"- PSD plot: `{metadata['psd_plot']}`",
             ]
         )
+        if "psd_plot" in metadata:
+            lines.append(f"- PSD plot: `{metadata['psd_plot']}`")
         if "temp_config_dir" in metadata:
             lines.append(f"- Temporary run directory: `{metadata['temp_config_dir']}`")
 
@@ -1305,6 +1321,7 @@ def analyse_project(
     fit_seasonal: bool | None,
     fit_halfseasonal: bool | None,
     keep_temp_config: bool,
+    make_psd_plots: bool,
 ) -> tuple[Path, int, list[Path]]:
     with timed_step(f"{project_name}: load project config and collect MOM files"):
         project_dir, config = load_project_config(project_name)
@@ -1329,6 +1346,7 @@ def analyse_project(
                 fit_seasonal,
                 fit_halfseasonal,
                 keep_temp_config,
+                make_psd_plots,
             )
         if "temp_config_dir" in metadata:
             kept_temp_dirs.append(Path(str(metadata["temp_config_dir"])))
@@ -1364,13 +1382,13 @@ def analyse_project(
         if len(sorted_results) > 1:
             with timed_step(f"{marker}: make grouped component data plot"):
                 make_station_component_data_plot(marker, sorted_results, data_figure_dir)
-            if all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
+            if make_psd_plots and all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
                 with timed_step(f"{marker}: make grouped component PSD plot"):
                     make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
-                with timed_step(f"{marker}: make grouped component Lomb signal plot"):
-                    make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "signal")
-                with timed_step(f"{marker}: make grouped component Lomb residuals plot"):
-                    make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
+            with timed_step(f"{marker}: make grouped component Lomb signal plot"):
+                make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "signal")
+            with timed_step(f"{marker}: make grouped component Lomb residuals plot"):
+                make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
         with timed_step(f"{marker}: write station summary report"):
             write_station_summary_report(marker, report_dir, noise_model_label, freq, sorted_results)
 
@@ -1392,6 +1410,7 @@ def main() -> int:
                 fit_seasonal=args.fit_seasonal,
                 fit_halfseasonal=args.fit_halfseasonal,
                 keep_temp_config=args.keep_temp_config,
+                make_psd_plots=args.make_psd_plots,
             )
     except (FileNotFoundError, ValueError, KeyError, RuntimeError) as exc:
         parser.error(str(exc))
