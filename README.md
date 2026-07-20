@@ -275,6 +275,7 @@ Outputs:
   : Lomb-Scargle period plots are written separately as `*_lomb_signal_days.png` and `*_lomb_residuals_days.png`
 - combined station subplot figures across available `_0/_1/_2` components when they exist
   : `components_data` is arranged as North, East, Up subplots and includes model annotations
+  : `components_residuals` is arranged the same way and shows residuals for all available components
   : when `--make-psd-plots` is used, `components_psd` is also written as a grouped PSD figure for the available components
   : grouped Lomb-Scargle plots are written as `*_components_lomb_signal_days.png` and `*_components_lomb_residuals_days.png`
   : fitted trend, uncertainty, fitted signals, and fitted noise parameters are shown when available

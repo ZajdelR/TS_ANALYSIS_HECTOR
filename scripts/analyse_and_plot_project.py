@@ -1050,6 +1050,50 @@ def make_station_component_data_plot(
     plt.close()
 
 
+def make_station_component_residual_plot(
+    marker: str,
+    component_results: list[dict[str, object]],
+    figure_dir: Path,
+) -> None:
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    ordered_results = sorted(
+        component_results,
+        key=lambda item: get_component_sort_key(item["station_name"]),
+    )
+    fig, axes = plt.subplots(len(ordered_results), 1, figsize=(12, 3.0 * len(ordered_results)), sharex=True)
+    if len(ordered_results) == 1:
+        axes = [axes]
+
+    for axis, result in zip(axes, ordered_results):
+        metadata = result["metadata"]
+        mom_path = Path(str(metadata["mom_path"]))
+        years, data_values, model_values = read_mom_series(mom_path)
+        residuals = [data - model for data, model in zip(data_values, model_values)]
+        rms_residuals = compute_rms(residuals)
+        component_label = str(metadata["component_label"])
+        offsets_mjd = [float(value) for value in metadata.get("offsets_mjd", [])]
+
+        axis.plot(
+            years,
+            residuals,
+            "-",
+            linewidth=0.8,
+            antialiased=False,
+            label=f"{component_label} residual RMS={rms_residuals:.3f} mm",
+        )
+        axis.axhline(0.0, color="black", linewidth=0.7, alpha=0.6)
+        add_offset_markers(axis, offsets_mjd)
+        axis.set_ylabel("mm")
+        axis.set_title(component_label)
+        axis.legend(loc="best", fontsize=9)
+
+    axes[-1].set_xlabel("Years")
+    fig.suptitle(f"{marker} residuals", fontsize=14)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    save_png(fig, figure_dir / f"{marker}_components_residuals.png")
+    plt.close(fig)
+
+
 def make_psd_plot(station: str, work_dir: Path, figure_dir: Path) -> None:
     estimatespectrum_x, estimatespectrum_y = read_two_column_file(work_dir / "estimatespectrum.out")
     modelspectrum_x, modelspectrum_y = read_two_column_file(work_dir / "modelspectrum.out")
@@ -1743,6 +1787,8 @@ def analyse_project(
         if len(sorted_results) > 1:
             with timed_step(f"{marker}: make grouped component data plot"):
                 make_station_component_data_plot(marker, sorted_results, data_figure_dir)
+            with timed_step(f"{marker}: make grouped component residual plot"):
+                make_station_component_residual_plot(marker, sorted_results, data_figure_dir)
             if make_psd_plots and all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
                 with timed_step(f"{marker}: make grouped component PSD plot"):
                     make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
