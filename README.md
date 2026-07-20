@@ -110,6 +110,7 @@ Each initialized project currently contains:
 - `pre_files/`
 - `mom_files/`
 - `json_output/`
+- `jumps_repository/`
 - `sea_files/`
 - `fil_files/`
 
@@ -247,6 +248,8 @@ Analysis arguments:
 - `--keep-temp-config` to keep the generated `hector_run_temp/STATION_DATE_TIME` directory for inspection after the run.
 - `--make-psd-plots` to run the slower Hector spectrum/model-spectrum steps and write PSD plots. PSD plots are skipped by default.
 - `--find-offsets` to run Hector `findoffset` before analysis, write offset-annotated MOM files to `obs_files/`, use those files for the analysis, and mark detected offsets in final plots.
+- `--offsets-file` to inject offsets from `jumps_repository/STATION_jumps` instead of running Hector `findoffset`.
+- `--offsets-file offsets.txt` to inject offsets from a specific text file. Relative names are resolved from `jumps_repository/` when they are not found as normal paths.
 - `--max-offsets 8` to control how many offsets are tested when `--find-offsets` is enabled.
 - `--offset-penalty 8.0` to override `BIC_c_ExtraPenalty` from the project-local `findoffset.ctl` for one run.
 - `--log-level INFO` to control CLI logging verbosity. Use `INFO` for timing messages, `DEBUG` for command/temp-directory details, or `WARNING` for quieter output.
@@ -263,11 +266,14 @@ Runtime note:
 - if a positive or negative seasonal flag is provided, it forces the corresponding setting for that run
 - PSD plots are skipped by default; use `--make-psd-plots` when you need Hector spectrum/model-spectrum output
 - offset finding is skipped by default; use `--find-offsets` to detect offsets and feed offset-annotated `obs_files/*.mom` files into the rest of the analysis
+- `--find-offsets` writes accepted offsets into `jumps_repository/STATION_jumps`
+- `--offsets-file` is an alternative to `--find-offsets`; without a value it reads `jumps_repository/STATION_jumps`, and with a value it reads that file. Offset files may contain one MJD per line for global offsets, or `station mjd` pairs where `station` is either a station marker or a component name such as `STATION_0`
 - default `INFO` logs show `START`/`DONE` messages with elapsed seconds for Hector commands, plots, reports, and each station/component workflow
 
 Outputs:
 
 - offset-annotated MOM files in `obs_files/` when `--find-offsets` is used
+- jump files in `jumps_repository/` when `--find-offsets` is used, named like `STATION_jumps`
 - cleaned files in `pre_files/`
 - analysed MOM files in `mom_files/`
 - Hector JSON files in `json_output/`, named with the station identifier, for example `STATION_hector_estimatetrend.json` and `STATION_hector_removeoutliers.json`

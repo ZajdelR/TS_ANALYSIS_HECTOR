@@ -51,6 +51,7 @@ Project structure
   pre_files/
   mom_files/
   json_output/
+  jumps_repository/
   sea_files/
   fil_files/
 
@@ -96,6 +97,10 @@ Common outputs
     *_hector_estimatetrend.json
     *_hector_removeoutliers.json
 
+  jumps_repository/
+    Station jump files written by --find-offsets and readable by --offsets-file
+    *_jumps
+
   fil_files/data_figures/
     Per-component and combined time-series plots
 
@@ -117,6 +122,11 @@ Notes
   - Offset finding is skipped by default. Use --find-offsets to run Hector
     findoffset, write offset-annotated MOM files to obs_files/, and mark
     detected offsets in plots.
+  - --find-offsets also writes jumps_repository/STATION_jumps files.
+  - As an alternative to --find-offsets, use --offsets-file to read
+    jumps_repository/STATION_jumps files, or --offsets-file offsets.txt to read
+    a specific file. Offset files may contain one MJD per line for global
+    offsets, or station MJD pairs.
   - Default INFO logs show START/DONE timing messages for Hector commands,
     plots, reports, and station/component workflows. Use --log-level WARNING
     for quieter output or --log-level DEBUG for more detail.

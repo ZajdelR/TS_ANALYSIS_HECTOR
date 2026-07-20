@@ -107,6 +107,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run Hector findoffset before analysis, write offset-annotated MOM files to obs_files, and mark detected offsets in plots.",
     )
     parser.add_argument(
+        "--offsets-file",
+        nargs="?",
+        const="",
+        help=(
+            "Text file with offsets to inject instead of running findoffset. If no file is provided, "
+            "load jumps_repository/STATION_jumps for each station. "
+            "Use either one MJD per line for global offsets or 'station mjd' pairs. "
+            "Station keys may be station markers or component names."
+        ),
+    )
+    parser.add_argument(
         "--max-offsets",
         type=int,
         default=8,
@@ -557,6 +568,104 @@ def write_mom_with_offset_headers(source_path: Path, destination_path: Path, off
                     destination.write(f"# offset {offset:.1f}\n")
                 header_open = False
             destination.write(line)
+
+
+def parse_offsets_file(offsets_path: Path) -> dict[str, list[float]]:
+    if not offsets_path.exists():
+        raise FileNotFoundError(f"Offsets file does not exist: {offsets_path}")
+
+    offsets: dict[str, list[float]] = {}
+    for line_number, raw_line in enumerate(offsets_path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        columns = re.split(r"[\s,;]+", line)
+        if len(columns) == 1:
+            key = "*"
+            value_text = columns[0]
+        elif len(columns) >= 2:
+            key = columns[0]
+            value_text = columns[1]
+        else:
+            continue
+        try:
+            offset_mjd = float(value_text)
+        except ValueError as exc:
+            raise ValueError(
+                f"Could not parse offset MJD on line {line_number} of {offsets_path}: {raw_line}"
+            ) from exc
+        offsets.setdefault(key, []).append(offset_mjd)
+
+    for values in offsets.values():
+        values.sort()
+    return offsets
+
+
+def get_jumps_repository_dir(project_dir: Path, config: dict[str, dict[str, object]]) -> Path:
+    return project_dir / str(config["paths"].get("jumps_repository_dir", "jumps_repository"))
+
+
+def get_jump_file_path(jumps_repository_dir: Path, marker: str) -> Path:
+    safe_marker = re.sub(r"[^A-Za-z0-9._-]+", "_", marker).strip("._-")
+    if not safe_marker:
+        safe_marker = "station"
+    return jumps_repository_dir / f"{safe_marker}_jumps"
+
+
+def resolve_offsets_file_path(offsets_file: str, jumps_repository_dir: Path) -> Path:
+    offsets_path = Path(offsets_file).expanduser()
+    if offsets_path.is_absolute() or offsets_path.exists():
+        return offsets_path.resolve()
+    return (jumps_repository_dir / offsets_file).resolve()
+
+
+def resolve_offsets_for_station(
+    station: str,
+    offsets_by_key: dict[str, list[float]],
+) -> list[float]:
+    marker = get_station_marker(station)
+    resolved: list[float] = []
+    for key in ("*", marker, station):
+        resolved.extend(offsets_by_key.get(key, []))
+    return sorted(set(resolved))
+
+
+def resolve_manual_offsets_for_station(
+    station: str,
+    offsets_by_key: dict[str, list[float]] | None,
+    jumps_repository_dir: Path,
+) -> list[float]:
+    if offsets_by_key is not None:
+        return resolve_offsets_for_station(station, offsets_by_key)
+
+    marker = get_station_marker(station)
+    jump_file_path = get_jump_file_path(jumps_repository_dir, marker)
+    offsets_from_file = parse_offsets_file(jump_file_path)
+    return resolve_offsets_for_station(station, offsets_from_file)
+
+
+def write_jumps_repository_files(
+    jumps_repository_dir: Path,
+    grouped_results: dict[str, list[dict[str, object]]],
+) -> None:
+    jumps_repository_dir.mkdir(parents=True, exist_ok=True)
+    for marker, component_results in grouped_results.items():
+        jump_file_path = get_jump_file_path(jumps_repository_dir, marker)
+        lines = [
+            f"# Offsets for {marker}",
+            "# Format: station_component mjd",
+        ]
+        for result in sorted(component_results, key=lambda item: item["station_name"]):
+            station_name = str(result["station_name"])
+            metadata = result["metadata"]
+            offsets_mjd = metadata.get("offsets_mjd", [])
+            if not isinstance(offsets_mjd, list) or not offsets_mjd:
+                lines.append(f"# {station_name}: no accepted offsets")
+                continue
+            for offset in offsets_mjd:
+                lines.append(f"{station_name} {float(offset):.1f}")
+        jump_file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        LOGGER.info("Wrote jumps repository file for %s: %s", marker, jump_file_path)
 
 
 def run_find_offsets(
@@ -1532,6 +1641,9 @@ def analyse_station(
     keep_temp_config: bool,
     make_psd_plots: bool,
     find_offsets: bool,
+    use_offsets_file: bool,
+    offsets_by_key: dict[str, list[float]] | None,
+    jumps_repository_dir: Path,
     max_offsets: int,
     offset_penalty: float | None,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
@@ -1542,6 +1654,7 @@ def analyse_station(
         hector_removeoutliers,
         hector_estimatetrend,
     ]
+    use_manual_offsets = use_offsets_file
     if find_offsets:
         hector_findoffset = Path(str(paths.get("hector_findoffset", Path(str(paths["hector_home"])) / "findoffset")))
         binary_paths.append(hector_findoffset)
@@ -1599,6 +1712,22 @@ def analyse_station(
                         fit_seasonal=fit_seasonal,
                         fit_halfseasonal=fit_halfseasonal,
                         max_offsets=max_offsets,
+                    )
+                analysis_input_dir = offset_mom_path.parent
+            elif use_manual_offsets:
+                with timed_step(f"{station}: apply offsets file"):
+                    offsets_mjd = resolve_manual_offsets_for_station(
+                        station,
+                        offsets_by_key,
+                        jumps_repository_dir,
+                    )
+                    offset_mom_path = obs_dir / f"{station}.mom"
+                    write_mom_with_offset_headers(input_mom_path, offset_mom_path, offsets_mjd)
+                    LOGGER.info(
+                        "%s: applied %d offset(s) from offsets file: %s",
+                        station,
+                        len(offsets_mjd),
+                        ", ".join(f"{offset:.1f}" for offset in offsets_mjd) if offsets_mjd else "none",
                     )
                 analysis_input_dir = offset_mom_path.parent
 
@@ -1725,7 +1854,8 @@ def analyse_station(
         "lomb_signal_plot": str(psd_figure_dir / f"{station}_lomb_signal_days.png"),
         "lomb_residuals_plot": str(psd_figure_dir / f"{station}_lomb_residuals_days.png"),
         "psd_cache_dir": str((fil_dir / "psd_cache" / station)),
-        "find_offsets_enabled": find_offsets,
+        "find_offsets_enabled": find_offsets or use_manual_offsets,
+        "offset_source": "hector_findoffset" if find_offsets else ("offsets_file" if use_manual_offsets else "none"),
         "offsets_mjd": offsets_mjd,
     }
     if offset_mom_path is not None:
@@ -1800,6 +1930,11 @@ def write_station_summary_report(
         if metadata.get("find_offsets_enabled"):
             lines.append("")
             lines.append("Offset detection:")
+            offset_source = metadata.get("offset_source")
+            if offset_source == "offsets_file":
+                lines.append("- Offset source: `offsets file`")
+            elif offset_source == "hector_findoffset":
+                lines.append("- Offset source: `Hector findoffset`")
             if "offset_mom_path" in metadata:
                 lines.append(f"- Offset-annotated MOM file: `{metadata['offset_mom_path']}`")
             if isinstance(offsets_mjd, list) and offsets_mjd:
@@ -1856,6 +1991,7 @@ def analyse_project(
     keep_temp_config: bool,
     make_psd_plots: bool,
     find_offsets: bool,
+    offsets_file: str | None,
     max_offsets: int,
     offset_penalty: float | None,
 ) -> tuple[Path, int, list[Path]]:
@@ -1864,6 +2000,16 @@ def analyse_project(
         raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
         mom_files = collect_station_files(raw_dir, station)
     LOGGER.info("Found %d station/component MOM file(s) in %s", len(mom_files), raw_dir)
+    jumps_repository_dir = get_jumps_repository_dir(project_dir, config)
+    use_offsets_file = offsets_file is not None
+    offsets_by_key = None
+    if offsets_file:
+        with timed_step(f"{project_name}: read offsets file"):
+            offsets_path = resolve_offsets_file_path(offsets_file, jumps_repository_dir)
+            offsets_by_key = parse_offsets_file(offsets_path)
+        LOGGER.info("Loaded manual offsets for %d key(s) from %s", len(offsets_by_key), offsets_file)
+    elif use_offsets_file:
+        LOGGER.info("Manual offsets enabled; loading per-station files from %s", jumps_repository_dir)
 
     estimatetrend_results: dict[str, object] = {}
     removeoutliers_results: dict[str, object] = {}
@@ -1884,6 +2030,9 @@ def analyse_project(
                 keep_temp_config,
                 make_psd_plots,
                 find_offsets,
+                use_offsets_file,
+                offsets_by_key,
+                jumps_repository_dir,
                 max_offsets,
                 offset_penalty,
             )
@@ -1900,6 +2049,10 @@ def analyse_project(
                 "metadata": metadata,
             }
         )
+
+    if find_offsets:
+        with timed_step(f"{project_name}: write jumps repository files"):
+            write_jumps_repository_files(jumps_repository_dir, grouped_results)
 
     mom_dir = project_dir / str(config["paths"]["mom_files_dir"])
     json_output_dir = project_dir / str(config["paths"].get("json_output_dir", "json_output"))
@@ -1952,6 +2105,8 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     configure_logging(args.log_level)
+    if args.find_offsets and args.offsets_file:
+        parser.error("--find-offsets and --offsets-file are alternatives; use only one.")
 
     try:
         with timed_step(f"{args.project_name}: full analyse-and-plot run"):
@@ -1965,6 +2120,7 @@ def main() -> int:
                 keep_temp_config=args.keep_temp_config,
                 make_psd_plots=args.make_psd_plots,
                 find_offsets=args.find_offsets,
+                offsets_file=args.offsets_file,
                 max_offsets=args.max_offsets,
                 offset_penalty=args.offset_penalty,
             )

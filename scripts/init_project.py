@@ -28,6 +28,7 @@ DEFAULT_SUBDIRECTORIES = (
     str(MACHINE_CONFIG["paths"]["pre_files_dir"]),
     str(MACHINE_CONFIG["paths"]["mom_files_dir"]),
     str(MACHINE_CONFIG["paths"]["json_output_dir"]),
+    str(MACHINE_CONFIG["paths"]["jumps_repository_dir"]),
     str(MACHINE_CONFIG["paths"]["sea_files_dir"]),
     str(MACHINE_CONFIG["paths"]["fil_files_dir"]),
 )
@@ -82,6 +83,7 @@ def render_yaml(project_name: str, hector_home: Path) -> str:
             f'  pre_files_dir: "{paths["pre_files_dir"]}"',
             f'  mom_files_dir: "{paths["mom_files_dir"]}"',
             f'  json_output_dir: "{paths["json_output_dir"]}"',
+            f'  jumps_repository_dir: "{paths["jumps_repository_dir"]}"',
             f'  sea_files_dir: "{paths["sea_files_dir"]}"',
             f'  fil_files_dir: "{paths["fil_files_dir"]}"',
             f'  hector_home: "{hector_home}"',

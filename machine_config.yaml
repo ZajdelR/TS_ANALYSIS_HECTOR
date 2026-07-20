@@ -9,6 +9,7 @@ paths:
   pre_files_dir: "pre_files"
   mom_files_dir: "mom_files"
   json_output_dir: "json_output"
+  jumps_repository_dir: "jumps_repository"
   sea_files_dir: "sea_files"
   fil_files_dir: "fil_files"
 files:
