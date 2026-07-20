@@ -749,6 +749,49 @@ def downsample_for_plot(
     return (x_values[::stride], *(values[::stride] for values in y_values))
 
 
+def infer_gap_threshold(mjd_values: np.ndarray) -> float | None:
+    if len(mjd_values) < 2:
+        return None
+    diffs = np.diff(mjd_values)
+    positive_diffs = diffs[np.isfinite(diffs) & (diffs > 0.0)]
+    if len(positive_diffs) == 0:
+        return None
+    return float(np.median(positive_diffs) * 1.5)
+
+
+def insert_line_gap_breaks(
+    mjd_values: np.ndarray,
+    x_values: np.ndarray,
+    *y_values: np.ndarray,
+) -> tuple[np.ndarray, ...]:
+    gap_threshold = infer_gap_threshold(mjd_values)
+    if gap_threshold is None:
+        return (x_values, *y_values)
+
+    break_indices = np.flatnonzero(np.diff(mjd_values) > gap_threshold) + 1
+    if len(break_indices) == 0:
+        return (x_values, *y_values)
+
+    output_length = len(x_values) + len(break_indices)
+    output_arrays = [np.empty(output_length, dtype=float) for _ in range(1 + len(y_values))]
+    source_arrays = (x_values, *y_values)
+    source_start = 0
+    output_start = 0
+
+    for break_index in break_indices:
+        segment_length = break_index - source_start
+        for output_array, source_array in zip(output_arrays, source_arrays):
+            output_array[output_start : output_start + segment_length] = source_array[source_start:break_index]
+            output_array[output_start + segment_length] = np.nan
+        output_start += segment_length + 1
+        source_start = break_index
+
+    for output_array, source_array in zip(output_arrays, source_arrays):
+        output_array[output_start:] = source_array[source_start:]
+
+    return tuple(output_arrays)
+
+
 def add_offset_markers(axis, offsets_mjd: list[float]) -> None:
     for index, offset_mjd in enumerate(offsets_mjd):
         axis.axvline(
@@ -764,9 +807,10 @@ def add_offset_markers(axis, offsets_mjd: list[float]) -> None:
 def make_data_plots(station: str, mom_path: Path, figure_dir: Path, offsets_mjd: list[float] | None = None) -> None:
     offsets_mjd = offsets_mjd or []
     with timed_step(f"{station}: read MOM series for data/residual plots"):
-        years, data_values, model_values = read_mom_series(mom_path)
+        mjd_values, years, data_values, model_values = read_mom_series_with_mjd(mom_path)
     LOGGER.info("%s: data/residual plots loaded %d samples", station, len(years))
     with timed_step(f"{station}: prepare data/residual arrays"):
+        mjd_array = np.asarray(mjd_values, dtype=float)
         years_array = np.asarray(years, dtype=float)
         data_array = np.asarray(data_values, dtype=float)
         model_array = np.asarray(model_values, dtype=float)
@@ -777,29 +821,42 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path, offsets_mjd:
             if len(residuals_array)
             else float("nan")
         )
-        plot_years, plot_data, plot_model = downsample_for_plot(
+        plot_mjd, plot_years, plot_data, plot_model = downsample_for_plot(
             station,
             "data/model",
+            mjd_array,
             years_array,
             data_array,
             model_array,
         )
-        residual_years, plot_residuals = downsample_for_plot(
+        residual_mjd, residual_years, plot_residuals = downsample_for_plot(
             station,
             "residual",
+            mjd_array,
             years_array,
             residuals_array,
+        )
+        plot_years, plot_data, plot_model = insert_line_gap_breaks(
+            plot_mjd,
+            plot_years,
+            plot_data,
+            plot_model,
+        )
+        residual_years, plot_residuals = insert_line_gap_breaks(
+            residual_mjd,
+            residual_years,
+            plot_residuals,
         )
 
     figure_dir.mkdir(parents=True, exist_ok=True)
 
-    data_marker = "," if len(plot_years) > DATA_MARKER_PIXEL_THRESHOLD else "."
+    data_marker = "," if len(plot_mjd) > DATA_MARKER_PIXEL_THRESHOLD else "."
     data_markersize = 1 if data_marker == "," else 3
     if data_marker == ",":
         LOGGER.info(
             "%s: using pixel markers for %d rendered data points",
             station,
-            len(plot_years),
+            len(plot_mjd),
         )
 
     with timed_step(f"{station}: render/save data plot"):
@@ -808,10 +865,11 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path, offsets_mjd:
             axis.plot(
                 plot_years,
                 plot_data,
-                linestyle="none",
+                linestyle="-",
                 marker=data_marker,
                 markersize=data_markersize,
                 markeredgewidth=0,
+                linewidth=0.6,
                 antialiased=False,
                 label=f"Data RMS={rms_data:.3f} mm",
             )
@@ -820,6 +878,9 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path, offsets_mjd:
                 plot_model,
                 "-",
                 linewidth=1.0,
+                marker=data_marker,
+                markersize=data_markersize,
+                markeredgewidth=0,
                 antialiased=False,
                 label="Model",
             )
@@ -841,6 +902,9 @@ def make_data_plots(station: str, mom_path: Path, figure_dir: Path, offsets_mjd:
                 residual_years,
                 plot_residuals,
                 "-",
+                marker=data_marker,
+                markersize=data_markersize,
+                markeredgewidth=0,
                 linewidth=0.8,
                 antialiased=False,
                 label=f"Residual RMS={rms_residuals:.3f} mm",
@@ -1011,18 +1075,52 @@ def make_station_component_data_plot(
     for axis, result in zip(axes, ordered_results):
         metadata = result["metadata"]
         mom_path = Path(str(metadata["mom_path"]))
-        years, data_values, model_values = read_mom_series(mom_path)
-        residuals = [data - model for data, model in zip(data_values, model_values)]
+        mjd_values, years, data_values, model_values = read_mom_series_with_mjd(mom_path)
+        mjd_array = np.asarray(mjd_values, dtype=float)
+        years_array = np.asarray(years, dtype=float)
+        data_array = np.asarray(data_values, dtype=float)
+        model_array = np.asarray(model_values, dtype=float)
+        residuals_array = data_array - model_array
         rms_data = compute_rms(data_values)
-        rms_residuals = compute_rms(residuals)
+        rms_residuals = float(np.sqrt(np.mean(residuals_array * residuals_array))) if len(residuals_array) else float("nan")
         component_label = str(metadata["component_label"])
         offsets_mjd = [float(value) for value in metadata.get("offsets_mjd", [])]
-        axis.plot(years, data_values, ".", markersize=2, label=f"{component_label} data RMS={rms_data:.3f} mm")
+        plot_mjd, plot_years, plot_data, plot_model = downsample_for_plot(
+            str(result["station_name"]),
+            "grouped data/model",
+            mjd_array,
+            years_array,
+            data_array,
+            model_array,
+        )
+        plot_years, plot_data, plot_model = insert_line_gap_breaks(
+            plot_mjd,
+            plot_years,
+            plot_data,
+            plot_model,
+        )
+        marker_style = "," if len(plot_mjd) > DATA_MARKER_PIXEL_THRESHOLD else "."
+        marker_size = 1 if marker_style == "," else 2
         axis.plot(
-            years,
-            model_values,
+            plot_years,
+            plot_data,
             "-",
-            linewidth=1.2,
+            marker=marker_style,
+            markersize=marker_size,
+            markeredgewidth=0,
+            linewidth=0.6,
+            antialiased=False,
+            label=f"{component_label} data RMS={rms_data:.3f} mm",
+        )
+        axis.plot(
+            plot_years,
+            plot_model,
+            "-",
+            marker=marker_style,
+            markersize=marker_size,
+            markeredgewidth=0,
+            linewidth=1.0,
+            antialiased=False,
             label=format_model_legend(result["estimatetrend"]),
         )
         add_offset_markers(axis, offsets_mjd)
@@ -1067,16 +1165,37 @@ def make_station_component_residual_plot(
     for axis, result in zip(axes, ordered_results):
         metadata = result["metadata"]
         mom_path = Path(str(metadata["mom_path"]))
-        years, data_values, model_values = read_mom_series(mom_path)
-        residuals = [data - model for data, model in zip(data_values, model_values)]
-        rms_residuals = compute_rms(residuals)
+        mjd_values, years, data_values, model_values = read_mom_series_with_mjd(mom_path)
+        mjd_array = np.asarray(mjd_values, dtype=float)
+        years_array = np.asarray(years, dtype=float)
+        data_array = np.asarray(data_values, dtype=float)
+        model_array = np.asarray(model_values, dtype=float)
+        residuals_array = data_array - model_array
+        rms_residuals = float(np.sqrt(np.mean(residuals_array * residuals_array))) if len(residuals_array) else float("nan")
         component_label = str(metadata["component_label"])
         offsets_mjd = [float(value) for value in metadata.get("offsets_mjd", [])]
+        residual_mjd, residual_years, plot_residuals = downsample_for_plot(
+            str(result["station_name"]),
+            "grouped residual",
+            mjd_array,
+            years_array,
+            residuals_array,
+        )
+        residual_years, plot_residuals = insert_line_gap_breaks(
+            residual_mjd,
+            residual_years,
+            plot_residuals,
+        )
+        marker_style = "," if len(residual_mjd) > DATA_MARKER_PIXEL_THRESHOLD else "."
+        marker_size = 1 if marker_style == "," else 2
 
         axis.plot(
-            years,
-            residuals,
+            residual_years,
+            plot_residuals,
             "-",
+            marker=marker_style,
+            markersize=marker_size,
+            markeredgewidth=0,
             linewidth=0.8,
             antialiased=False,
             label=f"{component_label} residual RMS={rms_residuals:.3f} mm",
