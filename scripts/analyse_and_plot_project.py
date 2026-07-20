@@ -7,11 +7,13 @@ import argparse
 import contextlib
 from datetime import datetime
 import json
+import logging
 import math
 import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -22,6 +24,9 @@ try:
     from scripts.project_config import load_project_config
 except ModuleNotFoundError:
     from project_config import load_project_config
+
+
+LOGGER = logging.getLogger("analyse-and-plot")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,7 +81,35 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Keep the generated hector_run_temp/STATION_DATE_TIME directory with temporary .ctl files and Hector scratch outputs.",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        default="INFO",
+        help="CLI logging verbosity. Use INFO for timing messages or WARNING for quieter output.",
+    )
     return parser
+
+
+def configure_logging(log_level: str) -> None:
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
+@contextlib.contextmanager
+def timed_step(message: str):
+    start_time = time.perf_counter()
+    LOGGER.info("START %s", message)
+    try:
+        yield
+    except Exception:
+        elapsed = time.perf_counter() - start_time
+        LOGGER.error("FAILED %s after %.2fs", message, elapsed)
+        raise
+    elapsed = time.perf_counter() - start_time
+    LOGGER.info("DONE  %s in %.2fs", message, elapsed)
 
 
 def parse_noisemodels(noisemodel_abr: str) -> list[str]:
@@ -934,6 +967,7 @@ def make_station_component_lomb_plot(
 
 
 def run_command(command: list[str], cwd: Path, stdout_path: Path | None = None, stdin_path: Path | None = None) -> None:
+    LOGGER.debug("Running command in %s: %s", cwd, " ".join(command))
     stdin_handle = stdin_path.open("r", encoding="utf-8") if stdin_path else None
     stdout_handle = stdout_path.open("w", encoding="utf-8") if stdout_path else subprocess.PIPE
     try:
@@ -987,11 +1021,13 @@ def temporary_run_directory(project_dir: Path, station: str, keep: bool):
         suffix += 1
 
     temp_dir.mkdir()
+    LOGGER.debug("Created temporary run directory for %s: %s", station, temp_dir)
     try:
         yield temp_dir
     finally:
         if not keep:
             shutil.rmtree(temp_dir, ignore_errors=True)
+            LOGGER.debug("Deleted temporary run directory for %s: %s", station, temp_dir)
 
 
 def analyse_station(
@@ -1000,8 +1036,8 @@ def analyse_station(
     config: dict[str, dict[str, object]],
     noise_model: str,
     freq: float,
-    fit_seasonal: bool,
-    fit_halfseasonal: bool,
+    fit_seasonal: bool | None,
+    fit_halfseasonal: bool | None,
     keep_temp_config: bool,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     paths = config["paths"]
@@ -1034,109 +1070,123 @@ def analyse_station(
     mom_dir.mkdir(parents=True, exist_ok=True)
 
     kept_temp_dir: Path | None = None
-    with temporary_run_directory(project_dir, station, keep_temp_config) as temp_dir:
-        if keep_temp_config:
-            kept_temp_dir = temp_dir
-            print(f"Keeping temporary run directory for {station}: {temp_dir}")
+    with timed_step(f"{station}: Hector commands and individual plots"):
+        with temporary_run_directory(project_dir, station, keep_temp_config) as temp_dir:
+            if keep_temp_config:
+                kept_temp_dir = temp_dir
+                LOGGER.info("Keeping temporary run directory for %s: %s", station, temp_dir)
 
-        removeoutliers_ctl = temp_dir / "removeoutliers.ctl"
-        create_removeoutliers_ctl_file(
-            removeoutliers_ctl,
-            hector_config_dir / "removeoutliers.ctl",
-            station,
-            raw_dir,
-            pre_dir,
-            freq,
-            fit_seasonal,
-            fit_halfseasonal,
-        )
-        run_command(
-            [str(hector_removeoutliers)],
-            cwd=temp_dir,
-            stdout_path=temp_dir / "removeoutliers.out",
-        )
+            removeoutliers_ctl = temp_dir / "removeoutliers.ctl"
+            with timed_step(f"{station}: prepare removeoutliers.ctl"):
+                create_removeoutliers_ctl_file(
+                    removeoutliers_ctl,
+                    hector_config_dir / "removeoutliers.ctl",
+                    station,
+                    raw_dir,
+                    pre_dir,
+                    freq,
+                    fit_seasonal,
+                    fit_halfseasonal,
+                )
+            with timed_step(f"{station}: Hector removeoutliers"):
+                run_command(
+                    [str(hector_removeoutliers)],
+                    cwd=temp_dir,
+                    stdout_path=temp_dir / "removeoutliers.out",
+                )
 
-        estimatetrend_ctl = temp_dir / "estimatetrend.ctl"
-        create_estimatetrend_ctl_file(
-            estimatetrend_ctl,
-            hector_config_dir / "estimatetrend.ctl",
-            station,
-            pre_dir,
-            mom_dir,
-            noisemodels,
-            freq,
-            fit_seasonal,
-            fit_halfseasonal,
-        )
-        run_command(
-            [str(hector_estimatetrend)],
-            cwd=temp_dir,
-            stdout_path=temp_dir / "estimatetrend.out",
-        )
+            estimatetrend_ctl = temp_dir / "estimatetrend.ctl"
+            with timed_step(f"{station}: prepare estimatetrend.ctl"):
+                create_estimatetrend_ctl_file(
+                    estimatetrend_ctl,
+                    hector_config_dir / "estimatetrend.ctl",
+                    station,
+                    pre_dir,
+                    mom_dir,
+                    noisemodels,
+                    freq,
+                    fit_seasonal,
+                    fit_halfseasonal,
+                )
+            with timed_step(f"{station}: Hector estimatetrend"):
+                run_command(
+                    [str(hector_estimatetrend)],
+                    cwd=temp_dir,
+                    stdout_path=temp_dir / "estimatetrend.out",
+                )
 
-        estimatetrend_json = json.loads((temp_dir / "estimatetrend.json").read_text(encoding="utf-8"))
-        removeoutliers_json = json.loads((temp_dir / "removeoutliers.json").read_text(encoding="utf-8"))
+            with timed_step(f"{station}: load Hector JSON results"):
+                estimatetrend_json = json.loads((temp_dir / "estimatetrend.json").read_text(encoding="utf-8"))
+                removeoutliers_json = json.loads((temp_dir / "removeoutliers.json").read_text(encoding="utf-8"))
 
-        sampling_period, _mjd0, _mjd1, number_of_points = read_sampling_info(mom_dir / f"{station}.mom")
+            with timed_step(f"{station}: read sampling info"):
+                sampling_period, _mjd0, _mjd1, number_of_points = read_sampling_info(mom_dir / f"{station}.mom")
 
-        estimatespectrum_ctl = temp_dir / "estimatespectrum.ctl"
-        create_estimatespectrum_ctl_file(
-            estimatespectrum_ctl,
-            hector_config_dir / "estimatespectrum.ctl",
-            station,
-            mom_dir,
-            noise_model,
-        )
-        output = subprocess.check_output([str(hector_estimatespectrum), "4"], cwd=temp_dir, text=True)
-        estimatespectrum_cols = output.split()
-        freq0 = estimatespectrum_cols[-5]
-        freq1 = estimatespectrum_cols[-3]
+            estimatespectrum_ctl = temp_dir / "estimatespectrum.ctl"
+            with timed_step(f"{station}: prepare estimatespectrum.ctl"):
+                create_estimatespectrum_ctl_file(
+                    estimatespectrum_ctl,
+                    hector_config_dir / "estimatespectrum.ctl",
+                    station,
+                    mom_dir,
+                    noise_model,
+                )
+            with timed_step(f"{station}: Hector estimatespectrum"):
+                output = subprocess.check_output([str(hector_estimatespectrum), "4"], cwd=temp_dir, text=True)
+                estimatespectrum_cols = output.split()
+                freq0 = estimatespectrum_cols[-5]
+                freq1 = estimatespectrum_cols[-3]
 
-        fixed_params = extract_optional_noise_parameters(estimatetrend_ctl)
+            fixed_params = extract_optional_noise_parameters(estimatetrend_ctl)
 
-        modelspectrum_ctl = temp_dir / "modelspectrum.ctl"
-        create_modelspectrum_ctl_file(
-            modelspectrum_ctl,
-            hector_config_dir / "modelspectrum.ctl",
-            station,
-            mom_dir,
-            estimatetrend_json,
-            sampling_period,
-            number_of_points,
-            fixed_params,
-        )
-        modelspectrum_input = temp_dir / "modelspectrum.txt"
-        fs = 1.0 / sampling_period
-        create_modelspectrum_input(
-            modelspectrum_input,
-            estimatetrend_json,
-            fs,
-            freq0,
-            freq1,
-            fixed_params,
-        )
-        run_command(
-            [str(hector_modelspectrum)],
-            cwd=temp_dir,
-            stdin_path=modelspectrum_input,
-        )
+            modelspectrum_ctl = temp_dir / "modelspectrum.ctl"
+            modelspectrum_input = temp_dir / "modelspectrum.txt"
+            fs = 1.0 / sampling_period
+            with timed_step(f"{station}: prepare modelspectrum inputs"):
+                create_modelspectrum_ctl_file(
+                    modelspectrum_ctl,
+                    hector_config_dir / "modelspectrum.ctl",
+                    station,
+                    mom_dir,
+                    estimatetrend_json,
+                    sampling_period,
+                    number_of_points,
+                    fixed_params,
+                )
+                create_modelspectrum_input(
+                    modelspectrum_input,
+                    estimatetrend_json,
+                    fs,
+                    freq0,
+                    freq1,
+                    fixed_params,
+                )
+            with timed_step(f"{station}: Hector modelspectrum"):
+                run_command(
+                    [str(hector_modelspectrum)],
+                    cwd=temp_dir,
+                    stdin_path=modelspectrum_input,
+                )
 
-        make_psd_plot(station, temp_dir, psd_figure_dir)
-        make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
-        psd_cache_dir = fil_dir / "psd_cache"
-        psd_cache_dir.mkdir(parents=True, exist_ok=True)
-        station_cache_dir = psd_cache_dir / station
-        if station_cache_dir.exists():
-            shutil.rmtree(station_cache_dir)
-        station_cache_dir.mkdir(parents=True, exist_ok=True)
-        for filename in (
-            "estimatespectrum.out",
-            "modelspectrum.out",
-            "modelspectrum_percentiles.out",
-        ):
-            source = temp_dir / filename
-            if source.exists():
-                shutil.copy2(source, station_cache_dir / filename)
+            with timed_step(f"{station}: make PSD plot"):
+                make_psd_plot(station, temp_dir, psd_figure_dir)
+            with timed_step(f"{station}: make data/residual plots"):
+                make_data_plots(station, mom_dir / f"{station}.mom", data_figure_dir)
+            with timed_step(f"{station}: cache PSD scratch outputs"):
+                psd_cache_dir = fil_dir / "psd_cache"
+                psd_cache_dir.mkdir(parents=True, exist_ok=True)
+                station_cache_dir = psd_cache_dir / station
+                if station_cache_dir.exists():
+                    shutil.rmtree(station_cache_dir)
+                station_cache_dir.mkdir(parents=True, exist_ok=True)
+                for filename in (
+                    "estimatespectrum.out",
+                    "modelspectrum.out",
+                    "modelspectrum_percentiles.out",
+                ):
+                    source = temp_dir / filename
+                    if source.exists():
+                        shutil.copy2(source, station_cache_dir / filename)
 
     metadata = {
         "marker": get_station_marker(station),
@@ -1151,20 +1201,22 @@ def analyse_station(
     }
     if kept_temp_dir is not None:
         metadata["temp_config_dir"] = str(kept_temp_dir)
-    signal_periods, signal_amplitudes = compute_signal_periodogram(mom_dir / f"{station}.mom")
-    make_lomb_scargle_period_plot(
-        psd_figure_dir / f"{station}_lomb_signal_days.png",
-        signal_periods,
-        signal_amplitudes,
-        f"{station} signal",
-    )
-    residual_periods, residual_amplitudes = compute_residual_periodogram(mom_dir / f"{station}.mom")
-    make_lomb_scargle_period_plot(
-        psd_figure_dir / f"{station}_lomb_residuals_days.png",
-        residual_periods,
-        residual_amplitudes,
-        f"{station} residuals",
-    )
+    with timed_step(f"{station}: make Lomb-Scargle signal plot"):
+        signal_periods, signal_amplitudes = compute_signal_periodogram(mom_dir / f"{station}.mom")
+        make_lomb_scargle_period_plot(
+            psd_figure_dir / f"{station}_lomb_signal_days.png",
+            signal_periods,
+            signal_amplitudes,
+            f"{station} signal",
+        )
+    with timed_step(f"{station}: make Lomb-Scargle residuals plot"):
+        residual_periods, residual_amplitudes = compute_residual_periodogram(mom_dir / f"{station}.mom")
+        make_lomb_scargle_period_plot(
+            psd_figure_dir / f"{station}_lomb_residuals_days.png",
+            residual_periods,
+            residual_amplitudes,
+            f"{station} residuals",
+        )
     return estimatetrend_json, removeoutliers_json, metadata
 
 
@@ -1254,9 +1306,11 @@ def analyse_project(
     fit_halfseasonal: bool | None,
     keep_temp_config: bool,
 ) -> tuple[Path, int, list[Path]]:
-    project_dir, config = load_project_config(project_name)
-    raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
-    mom_files = collect_station_files(raw_dir, station)
+    with timed_step(f"{project_name}: load project config and collect MOM files"):
+        project_dir, config = load_project_config(project_name)
+        raw_dir = project_dir / str(config["paths"]["raw_files_dir"])
+        mom_files = collect_station_files(raw_dir, station)
+    LOGGER.info("Found %d station/component MOM file(s) in %s", len(mom_files), raw_dir)
 
     estimatetrend_results: dict[str, object] = {}
     removeoutliers_results: dict[str, object] = {}
@@ -1265,16 +1319,17 @@ def analyse_project(
     noise_model_label = noise_model if noise_model else "project-local .ctl templates"
     for mom_file in mom_files:
         station_name = mom_file.stem
-        est_json, rem_json, metadata = analyse_station(
-            station_name,
-            project_dir,
-            config,
-            noise_model,
-            freq,
-            fit_seasonal,
-            fit_halfseasonal,
-            keep_temp_config,
-        )
+        with timed_step(f"{station_name}: station/component workflow"):
+            est_json, rem_json, metadata = analyse_station(
+                station_name,
+                project_dir,
+                config,
+                noise_model,
+                freq,
+                fit_seasonal,
+                fit_halfseasonal,
+                keep_temp_config,
+            )
         if "temp_config_dir" in metadata:
             kept_temp_dirs.append(Path(str(metadata["temp_config_dir"])))
         estimatetrend_results[station_name] = est_json
@@ -1291,14 +1346,15 @@ def analyse_project(
 
     mom_dir = project_dir / str(config["paths"]["mom_files_dir"])
     fil_dir = project_dir / str(config["paths"]["fil_files_dir"])
-    (mom_dir / "hector_estimatetrend.json").write_text(
-        json.dumps(estimatetrend_results, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    (mom_dir / "hector_removeoutliers.json").write_text(
-        json.dumps(removeoutliers_results, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with timed_step(f"{project_name}: write aggregate Hector JSON files"):
+        (mom_dir / "hector_estimatetrend.json").write_text(
+            json.dumps(estimatetrend_results, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (mom_dir / "hector_removeoutliers.json").write_text(
+            json.dumps(removeoutliers_results, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     data_figure_dir = fil_dir / "data_figures"
     psd_figure_dir = fil_dir / "psd_figures"
@@ -1306,12 +1362,17 @@ def analyse_project(
     for marker, component_results in grouped_results.items():
         sorted_results = sorted(component_results, key=lambda item: item["station_name"])
         if len(sorted_results) > 1:
-            make_station_component_data_plot(marker, sorted_results, data_figure_dir)
+            with timed_step(f"{marker}: make grouped component data plot"):
+                make_station_component_data_plot(marker, sorted_results, data_figure_dir)
             if all(Path(str(item["metadata"]["psd_cache_dir"])).exists() for item in sorted_results):
-                make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
-                make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "signal")
-                make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
-        write_station_summary_report(marker, report_dir, noise_model_label, freq, sorted_results)
+                with timed_step(f"{marker}: make grouped component PSD plot"):
+                    make_station_component_psd_plot(marker, sorted_results, psd_figure_dir)
+                with timed_step(f"{marker}: make grouped component Lomb signal plot"):
+                    make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "signal")
+                with timed_step(f"{marker}: make grouped component Lomb residuals plot"):
+                    make_station_component_lomb_plot(marker, sorted_results, psd_figure_dir, "residuals")
+        with timed_step(f"{marker}: write station summary report"):
+            write_station_summary_report(marker, report_dir, noise_model_label, freq, sorted_results)
 
     return mom_dir, len(mom_files), kept_temp_dirs
 
@@ -1319,17 +1380,19 @@ def analyse_project(
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    configure_logging(args.log_level)
 
     try:
-        output_dir, station_count, kept_temp_dirs = analyse_project(
-            project_name=args.project_name,
-            noise_model=args.noise_model,
-            station=args.station,
-            freq=args.freq,
-            fit_seasonal=args.fit_seasonal,
-            fit_halfseasonal=args.fit_halfseasonal,
-            keep_temp_config=args.keep_temp_config,
-        )
+        with timed_step(f"{args.project_name}: full analyse-and-plot run"):
+            output_dir, station_count, kept_temp_dirs = analyse_project(
+                project_name=args.project_name,
+                noise_model=args.noise_model,
+                station=args.station,
+                freq=args.freq,
+                fit_seasonal=args.fit_seasonal,
+                fit_halfseasonal=args.fit_halfseasonal,
+                keep_temp_config=args.keep_temp_config,
+            )
     except (FileNotFoundError, ValueError, KeyError, RuntimeError) as exc:
         parser.error(str(exc))
 

@@ -244,6 +244,7 @@ Analysis arguments:
 - `--fit-halfseasonal` to force `halfseasonalsignal yes` for this run.
 - `--no-fit-halfseasonal` to force `halfseasonalsignal no` for this run.
 - `--keep-temp-config` to keep the generated `hector_run_temp/STATION_DATE_TIME` directory for inspection after the run.
+- `--log-level INFO` to control CLI logging verbosity. Use `INFO` for timing messages, `DEBUG` for command/temp-directory details, or `WARNING` for quieter output.
 
 Runtime note:
 
@@ -255,6 +256,7 @@ Runtime note:
 - if `--fit-seasonal` is absent, the existing `seasonalsignal` value from the project `.ctl` template is preserved
 - if `--fit-halfseasonal` is absent, the existing `halfseasonalsignal` value from the project `.ctl` template is preserved
 - if a positive or negative seasonal flag is provided, it forces the corresponding setting for that run
+- default `INFO` logs show `START`/`DONE` messages with elapsed seconds for Hector commands, plots, reports, and each station/component workflow
 
 Outputs:
 
